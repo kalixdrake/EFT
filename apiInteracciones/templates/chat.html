@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Financiero IA</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f4f6f9; }
+        #chat { background: #fff; border: 1px solid #ccc; height: 500px; overflow-y: scroll; padding: 15px; margin-bottom: 10px; border-radius: 8px; }
+        .user { color: #333; margin-bottom: 10px; text-align: right; }
+        .user .msg { background: #d1e7dd; display: inline-block; padding: 8px 12px; border-radius: 12px; }
+        .ai { color: #333; margin-bottom: 10px; text-align: left; }
+        .ai .msg { background: #e2e3e5; display: inline-block; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+        .input-group { display: flex; gap: 10px; }
+        input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; background: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        button:hover { background: #0b5ed7; }
+    </style>
+</head>
+<body>
+    <h2>Asistente Financiero IA</h2>
+    <div id="chat"></div>
+    <div class="input-group">
+        <input type="text" id="prompt" placeholder="Escribe tu mensaje..." onkeypress="if(event.key === 'Enter') send()" />
+        <button onclick="send()" id="sendBtn">Enviar</button>
+    </div>
+    <script>
+        function addMessage(sender, text) {
+            const chat = document.getElementById("chat");
+            const div = document.createElement("div");
+            div.className = sender;
+            div.innerHTML = `<div class="msg"><b>${sender === 'user' ? 'Tú' : 'IA'}:</b><br/>${text}</div>`;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        async function send() {
+            const input = document.getElementById("prompt");
+            const text = input.value.trim();
+            if(!text) return;
+            
+            addMessage('user', text);
+            input.value = "";
+            input.disabled = true;
+            document.getElementById("sendBtn").disabled = true;
+
+            try {
+                const response = await fetch('/chat/api/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+                    body: JSON.stringify({prompt: text})
+                });
+                const data = await response.json();
+                addMessage('ai', data.respuesta || 'Sin respuesta');
+            } catch(e) {
+                addMessage('ai', 'Error de conexión: ' + e);
+            }
+
+            input.disabled = false;
+            document.getElementById("sendBtn").disabled = false;
+            input.focus();
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>

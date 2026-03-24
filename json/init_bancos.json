@@ -1,0 +1,23 @@
+[
+    {
+        "model": "apiBancos.banco",
+        "pk": 1,
+        "fields": {
+            "nombre": "Banco Caja Social"
+        }
+    },
+    {
+        "model": "apiBancos.banco",
+        "pk": 2,
+        "fields": {
+            "nombre": "Nequi"
+        }
+    },
+    {
+        "model": "apiBancos.banco",
+        "pk": 3,
+        "fields": {
+            "nombre": "Efectivo"
+        }
+    }
+]

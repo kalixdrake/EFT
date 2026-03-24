@@ -26,3 +26,6 @@ ENV/
 
 # Archivos de VSCode
 .vscode/
+
+# Modelos locales grandes
+llms/
