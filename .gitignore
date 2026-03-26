@@ -29,3 +29,6 @@ ENV/
 
 # Modelos locales grandes
 llms/
+
+*/media
+media

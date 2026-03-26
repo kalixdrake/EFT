@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -9,7 +11,6 @@ urlpatterns = [
     path('api/', include('apiBancos.urls')),
     path('api/', include('apiCuentas.urls')),
     path('api/', include('apiTransacciones.urls')),
-    path('api/', include('apiPresupuestos.urls')),
 
     path('chat/', include('apiInteracciones.urls')),
 
@@ -19,4 +20,8 @@ urlpatterns = [
     # Endpoint para acceder a la Interfaz Gráfica (Swagger)
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]
+
+# Servir archivos media en desarrollo
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

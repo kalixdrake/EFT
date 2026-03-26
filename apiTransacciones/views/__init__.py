@@ -1,1 +1,2 @@
-from .transaccion_viewset import TransaccionViewSet, TipoTransaccionViewSet, CategoriaTransaccionViewSet
+from .transaccion_viewset import TransaccionViewSet
+from .categoria_viewset import CategoriaViewSet

@@ -1,1 +1,2 @@
-from .transaccion_serializer import TransaccionSerializer, TipoTransaccionSerializer, CategoriaTransaccionSerializer
+from .transaccion_serializer import TransaccionSerializer
+from .categoria_serializer import CategoriaSerializer

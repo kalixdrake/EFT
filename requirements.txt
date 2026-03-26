@@ -3,7 +3,14 @@ djangorestframework
 django-filter
 drf-spectacular
 requests
-llama-cpp-python
+#llama-cpp-python
+
+# Procesamiento de archivos
+pandas
+openpyxl
+pymupdf
+pillow
+pytesseract
 
 # Para instalar llama-cpp-python con soporte ROCm/HIP, usa este comando en vez de solo pip install:
 # CUDACXX=/opt/rocm-7.2.0/bin/hipcc CMAKE_ARGS="-DGGML_HIP=ON -DCMAKE_PREFIX_PATH=/opt/rocm-7.2.0" FORCE_CMAKE=1 pip install llama-cpp-python

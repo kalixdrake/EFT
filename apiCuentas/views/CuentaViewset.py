@@ -9,4 +9,3 @@ class CuentaViewSet(viewsets.ModelViewSet):
     serializer_class = CuentaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = CuentaFilter
-

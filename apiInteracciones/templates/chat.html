@@ -3,59 +3,136 @@
 <head>
     <title>Chat Financiero IA</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f4f6f9; }
-        #chat { background: #fff; border: 1px solid #ccc; height: 500px; overflow-y: scroll; padding: 15px; margin-bottom: 10px; border-radius: 8px; }
-        .user { color: #333; margin-bottom: 10px; text-align: right; }
-        .user .msg { background: #d1e7dd; display: inline-block; padding: 8px 12px; border-radius: 12px; }
-        .ai { color: #333; margin-bottom: 10px; text-align: left; }
-        .ai .msg { background: #e2e3e5; display: inline-block; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 700px; margin: auto; padding: 20px; background: #f4f6f9; }
+        h2 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
+        #chat { background: #fff; border: 1px solid #ddd; height: 500px; overflow-y: auto; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .message { margin-bottom: 12px; display: flex; flex-direction: column; }
+        .user { align-items: flex-end; }
+        .user .msg { background: #d1e7dd; color: #0f5132; }
+        .ai { align-items: flex-start; }
+        .ai .msg { background: #e2e3e5; color: #383d41; }
+        .msg { padding: 10px 14px; border-radius: 12px; max-width: 80%; word-wrap: break-word; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .attachment-info { font-size: 12px; margin-top: 5px; opacity: 0.7; padding: 4px 8px; background: rgba(0,0,0,0.05); border-radius: 6px; display: inline-block; }
+        .input-area { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .input-group { display: flex; gap: 10px; }
-        input[type="text"] { flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; }
-        button { padding: 10px 20px; background: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-        button:hover { background: #0b5ed7; }
+        input[type="text"] { flex-grow: 1; padding: 10px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
+        input[type="text"]:focus { outline: none; border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1); }
+        .button-group { display: flex; gap: 8px; }
+        button { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+        button:hover { transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        #sendBtn { background: #0d6efd; color: #fff; }
+        #sendBtn:hover { background: #0b5ed7; }
+        #sendBtn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .file-input-wrapper { position: relative; display: inline-block; overflow: hidden; }
+        #fileInput { display: none; }
+        #attachBtn { background: #6c757d; color: #fff; }
+        #attachBtn:hover { background: #5c636a; }
+        .file-info { font-size: 12px; color: #666; margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 6px; }
+        .file-badge { display: inline-block; background: #e7f3ff; color: #0066cc; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px; }
     </style>
 </head>
 <body>
-    <h2>Asistente Financiero IA</h2>
+    <h2>🤖 Asistente Financiero IA</h2>
+    <p class="subtitle">Consulta sobre tus transacciones, presupuestos y finanzas. Puedes adjuntar archivos (Excel, PDF, CSV)</p>
+    
     <div id="chat"></div>
-    <div class="input-group">
-        <input type="text" id="prompt" placeholder="Escribe tu mensaje..." onkeypress="if(event.key === 'Enter') send()" />
-        <button onclick="send()" id="sendBtn">Enviar</button>
+    
+    <div class="input-area">
+        <div id="attachedFile" style="margin-bottom: 10px;"></div>
+        <div class="input-group">
+            <input type="text" id="prompt" placeholder="Pregunta sobre tus finanzas..." onkeypress="if(event.key === 'Enter') send()" />
+            <div class="file-input-wrapper">
+                <button id="attachBtn">📎 Adjuntar</button>
+                <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.doc,.docx" />
+            </div>
+            <button onclick="send()" id="sendBtn">Enviar</button>
+        </div>
+        <div class="file-info" id="fileInfo" style="display: none;"></div>
     </div>
+
     <script>
-        function addMessage(sender, text) {
+        let selectedFile = null;
+
+        // Event listeners para carga de archivos
+        document.getElementById("attachBtn").addEventListener("click", () => {
+            document.getElementById("fileInput").click();
+        });
+
+        document.getElementById("fileInput").addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFile = file;
+                const fileInfo = document.getElementById("fileInfo");
+                fileInfo.style.display = "block";
+                fileInfo.innerHTML = `<span class="file-badge">✓ ${file.name}</span> (${(file.size / 1024).toFixed(2)} KB)`;
+            }
+        });
+
+        function addMessage(sender, text, hasAttachment = false) {
             const chat = document.getElementById("chat");
-            const div = document.createElement("div");
-            div.className = sender;
-            div.innerHTML = `<div class="msg"><b>${sender === 'user' ? 'Tú' : 'IA'}:</b><br/>${text}</div>`;
-            chat.appendChild(div);
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message ${sender}`;
+            
+            let attachmentHTML = "";
+            if (hasAttachment) {
+                attachmentHTML = `<div class="attachment-info">📎 Archivo adjunto</div>`;
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="msg">${text}</div>
+                ${attachmentHTML}
+            `;
+            chat.appendChild(messageDiv);
             chat.scrollTop = chat.scrollHeight;
         }
 
         async function send() {
             const input = document.getElementById("prompt");
             const text = input.value.trim();
-            if(!text) return;
+            if (!text) return;
             
-            addMessage('user', text);
+            addMessage('user', text, selectedFile !== null);
             input.value = "";
             input.disabled = true;
             document.getElementById("sendBtn").disabled = true;
+            document.getElementById("attachBtn").disabled = true;
 
             try {
+                const formData = new FormData();
+                formData.append("prompt", text);
+                
+                if (selectedFile) {
+                    formData.append("archivo", selectedFile);
+                }
+
                 const response = await fetch('/chat/api/', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
-                    body: JSON.stringify({prompt: text})
+                    headers: {'X-CSRFToken': getCookie('csrftoken')},
+                    body: formData
                 });
+
                 const data = await response.json();
-                addMessage('ai', data.respuesta || 'Sin respuesta');
-            } catch(e) {
-                addMessage('ai', 'Error de conexión: ' + e);
+                if (response.ok) {
+                    addMessage('ai', data.respuesta || 'Sin respuesta');
+                } else {
+                    addMessage('ai', `Error: ${data.error || 'Error desconocido'}`);
+                }
+            } catch (e) {
+                addMessage('ai', `Error de conexión: ${e.message}`);
             }
 
+            // Limpiar estado
+            selectedFile = null;
+            document.getElementById("fileInput").value = "";
+            document.getElementById("attachedFile").innerHTML = "";
+            document.getElementById("fileInfo").style.display = "none";
+            
             input.disabled = false;
             document.getElementById("sendBtn").disabled = false;
+            document.getElementById("attachBtn").disabled = false;
             input.focus();
         }
 

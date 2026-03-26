@@ -13,10 +13,10 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'EFT.settings')
 django.setup()
 
 # Importar los modelos necesarios
-from apiTransacciones.models.transaccion_model import Transaccion, TipoTransaccion, CategoriaTransaccion
+from apiTransacciones.models.transaccion_model import Transaccion
+
 from apiCuentas.models.cuenta_model import Cuenta
 from apiBancos.models.banco_model import Banco
-from apiPresupuestos.models.presupuesto_model import TransaccionProgramada
 
 from apiInteracciones.models import InteraccionIA
 
@@ -38,13 +38,7 @@ def obtener_historial_transacciones():
             destino = f"{t.cuenta_destino.id}" if t.cuenta_destino else "N/A"
             historial += f"- {t.fecha.strftime('%Y-%m-%d')} | Desc: {t.descripcion} | Monto: ${t.monto} | Tipo: {tipo_nombre} | Origen: {origen} | Destino: {destino}\n"
         
-        # Obtener programadas
-        programadas = TransaccionProgramada.objects.all().order_by('-id')[:10]
-        historial_prog = "Transacciones Programadas:\n"
-        for p in programadas:
-            historial_prog += f"- {p.mes}/{p.anio} | Desc: {p.descripcion} | Monto: ${p.monto} | Estado: {p.estado}\n"
-
-        return f"{resumen_cuentas}\n{historial}\n{historial_prog}"
+        return f"{resumen_cuentas}\n{historial}"
     except Exception as e:
         return f"Error al obtener historial: {str(e)}"
 
@@ -71,61 +65,30 @@ def crear_transaccion(datos):
         cuenta_origen = Cuenta.objects.get(id=origen_id) if origen_id else None
         cuenta_destino = Cuenta.objects.get(id=destino_id) if destino_id else None
         
-        # Obtenemos o creamos un tipo por defecto (ej. EGRESO o INGRESO)
-        tipo_accion = datos.get('tipo', 'EGRESO').upper()
-        tipo, _ = TipoTransaccion.objects.get_or_create(accion=tipo_accion)
-
         # Categoria
         categoria_nombre = datos.get('categoria')
         categoria = None
+        tipo = None
         if categoria_nombre:
-            categoria, _ = CategoriaTransaccion.objects.get_or_create(nombre=categoria_nombre.title())
+            categoria = CategoriaTransaccion.objects.filter(nombre__iexact=categoria_nombre).first()
+            tipo = categoria.TipoTransaccion if categoria else None
+
+        if not categoria or not tipo:
+            return {
+                "status": "error",
+                "message": "Se requiere categoria con tipo configurado para crear transacciones."
+            }
 
         transaccion = Transaccion.objects.create(
             cuenta_origen=cuenta_origen,
             cuenta_destino=cuenta_destino,
             monto=datos['monto'],
             descripcion=datos['descripcion'],
-            tipo=tipo,
             categoria=categoria
         )
         return {"status": "success", "message": f"Transacción de ${transaccion.monto} creada para '{transaccion.descripcion}' exitosamente."}
     except Exception as e:
         return {"status": "error", "message": f"Error al crear transacción: {str(e)}"}
-
-def crear_transaccion_programada(datos):
-    """Crea una transacción programada en la base de datos para presupuestos."""
-    try:
-        cuenta = Cuenta.objects.get(id=datos.get('cuenta_id', 1))
-        
-        tipo_accion = datos.get('tipo', 'EGRESO').upper()
-        tipo, _ = TipoTransaccion.objects.get_or_create(accion=tipo_accion)
-        
-        # Categoria
-        categoria_nombre = datos.get('categoria')
-        categoria = None
-        if categoria_nombre:
-            categoria, _ = CategoriaTransaccion.objects.get_or_create(nombre=categoria_nombre.title())
-        
-        actual = datetime.now()
-        anio = datos.get('anio', actual.year)
-        mes = datos.get('mes', actual.month)
-        tipo_periodo = datos.get('tipo_periodo', 'MES')
-
-        programada = TransaccionProgramada.objects.create(
-            cuenta=cuenta,
-            monto=datos['monto'],
-            descripcion=datos['descripcion'],
-            tipo=tipo,
-            categoria=categoria,
-            tipo_periodo=tipo_periodo,
-            anio=anio,
-            mes=mes,
-            estado='PROGRAMADA'
-        )
-        return {"status": "success", "message": f"Transacción programada de ${programada.monto} para '{programada.descripcion}' registrada en {mes}/{anio}."}
-    except Exception as e:
-        return {"status": "error", "message": f"Error al programar transacción: {str(e)}"}
 
 def obtener_memoria_ia():
     try:
@@ -189,68 +152,135 @@ SIEMPRE que uses el modo de acciones, tu respuesta debe ser ÚNICAMENTE un objet
 
 REGLA IMPORTANTE PARA TRANSACCIONES FUTURAS: Si el usuario indica que "debe realizar" un movimiento, "tiene una deuda", "tiene que hacer un pago", o se refiere a un gasto o ingreso en el futuro, ESTO NO ES UNA TRANSACCIÓN NORMAL. DEBES registrarlo como una Transacción Programada llamando al POST de "/api/presupuestos/". Utiliza el POST de "/api/transacciones/" ÚNICAMENTE para movimientos que ya ocurrieron o se efectúan en este preciso momento.
 
-ENDPOINTS DISPONIBLES Y ESTRUCTURAS ESPERADAS:
+ENDPOINTS DISPONIBLES (FORMATO REFACTORIZADO):
 
-1. "/api/bancos/": 
-   - GET: Filtra bancos por nombre. Ej: {{"nombre": "Caja Social"}}. Devuelve lista de bancos con su "id" y "nombre".
-   - POST: Crea un banco. Payload: {{"nombre": "string"}}
+A) ENDPOINTS DE DOCUMENTACION
+- GET "/api/schema/": Devuelve OpenAPI en JSON. Si tienes dudas del payload o de un campo, usa este endpoint primero.
+- GET "/api/docs/": UI de Swagger (referencia visual; normalmente preferir "/api/schema/" porque retorna JSON).
 
-2. "/api/categorias-transaccion/":
-   - GET: Lista las categorías existentes para obtener su "id".
-   - POST: Crea una categoría. Payload: {{"nombre": "string", "descripcion": "string"}}
+B) ENDPOINTS BASICOS (PATRON CRUD)
+Para los recursos que se listan abajo, asume este patron:
+- GET "/api/{{recurso}}/" -> listar (usa filtros cuando existan)
+- POST "/api/{{recurso}}/" -> crear
+- GET "/api/{{recurso}}/{{id}}/" -> detalle
+- PATCH "/api/{{recurso}}/{{id}}/" -> actualizar parcial
+- DELETE "/api/{{recurso}}/{{id}}/" -> eliminar
 
-3. "/api/cuentas/": 
-   - GET: Filtra cuentas. Parámetros permitidos: "nombre" (texto) o "banco" (ID numérico del banco obtenido de /api/bancos/).
-   - POST: Crea una cuenta. Payload: {{"banco": 1, "saldo": 1000.0, "numero": 1234, "nombre": "Opcional"}} -> IMPORTANTE: "banco" DEBE SER EL ID NUMÉRICO.
-   - PUT/PATCH a "/api/cuentas/{id}/": Modifica una transacción existente.
-   - DELETE a "/api/cuentas/{id}/": Elimina una transacción.
+Recursos base:
+1. "/api/bancos/"
+    - Filtro recomendado en GET: "nombre"
+    - POST esperado: {{"nombre": "string"}}
 
-4. "/api/tipos-transaccion/":
-   - GET: Lista los tipos de transacción (ej. INGRESO, EGRESO, TRANSFERENCIA, etc.) para que obtengas su ID numérico.
+2. "/api/categorias-transaccion/"
+    - POST esperado: {{"nombre": "string", "descripcion": "string"}}
 
-5. "/api/transacciones/":
-   - GET: Lista las transacciones.
-   - POST: Crea una transacción. Payload: {{
-        "monto": 150.0, 
-        "descripcion": "string", 
-        "tipo": 1, // ID numérico de TipoTransaccion
-        "categoria": 2, // ID numérico de CategoriaTransaccion (opcional)
-        "cuenta_origen": 1, // ID numérico de Cuenta (opcional)
-        "cuenta_destino": 2 // ID numérico de Cuenta (opcional)
-     }}
-   - PUT/PATCH a "/api/transacciones/{id}/": Modifica una transacción existente.
-   - DELETE a "/api/transacciones/{id}/": Elimina una transacción.
+3. "/api/tipos-transaccion/"
+    - Usalo para resolver IDs de tipos (INGRESO, EGRESO, TRANSFERENCIA, etc.)
 
-6. "/api/presupuestos/":
-   - GET: Lista transacciones programadas o presupuestos. 
-     Filtros permitidos: "tipo" (ID numérico), "categoria" (ID numérico), "mes" (número del 1 al 12), "estado" (ej. "PROGRAMADA", "EJECUTADA"), "transaccion_aplicada_isnull" (True/False). IMPORTANTE: Si necesitas listar y puedes usar estos filtros, úsalos pasando la clave requerida en el data del GET para mantener las respuestas lo más acotadas y pequeñas posibles.
-   - POST: Crea una transacción programada. Payload: {{
-        "monto": 100.0,
-        "descripcion": "string",
-        "tipo": 1, // ID numérico
-        "categoria": 2, // ID numérico (opcional)
-        "cuenta": 1, // ID numérico de la cuenta afectada
-        "tipo_periodo": "MES",
-        "anio": 2026,
-        "mes": 3
-     }}
-   - POST a "/api/presupuestos/crear-repetitivas/": Crea transacciones programadas repetitivas por varios meses usando bulk_create. 
-   Payload: {{
-        "monto": 100.0,
-        "descripcion": "string",
-        "tipo": 1,
-        "categoria": 2,
-        "cuenta": 1,
-        "tipo_periodo": "MES",   
-        "anio": 2026,
-        "mes_inicio": 4,
-        "mes_fin": 12,
-        "porcentaje": 10.0,
-        "transaccion_base_descripcion": "Salario"
-     }}
-   - PATCH a "/api/presupuestos/{id}": Modifica una transacción programada.
-   - PATCH a "/api/presupuestos/{id}/ejecutar/": Ejecuta una transacción programada.
-   - DELETE a "/api/presupuestos/{id}/" borra una transacción programada (la cancela)
+4. "/api/cuentas/"
+    - Filtros recomendados en GET: "nombre", "banco"
+    - POST esperado: {{"banco": 1, "saldo": 1000.0, "numero": 1234, "nombre": "Opcional"}}
+    - IMPORTANTE: "banco" siempre es ID numerico
+
+5. "/api/transacciones/"
+    - POST esperado: {{
+         "monto": 150.0,
+         "descripcion": "string",
+         "categoria": 2,
+         "cuenta_origen": 1,
+         "cuenta_destino": 2
+      }}
+    - IMPORTANTE: el tipo se infiere desde la categoria (categoria.TipoTransaccion)
+    - Para hechos FUTUROS usa presupuestos, no transacciones directas
+
+7. CATEGORIAS DE TRANSFERENCIA
+        - Para transferencias entre cuentas usa categorias especiales:
+            - "transferencia_egr" para salida
+            - "transferencia_ing" para entrada
+        - El sistema crea doble movimiento (egreso + ingreso) con acciones personalizadas.
+
+6. "/api/presupuestos/"
+    - Filtros disponibles en GET: "tipo" (derivado de categoria), "categoria", "mes", "descripcion", "estado", "transaccion_aplicada_isnull"
+    - POST esperado: {{
+         "monto": 100.0,
+         "descripcion": "string",
+         "categoria": 2,
+         "cuenta": 1,
+         "tipo_periodo": "MES",
+         "anio": 2026,
+         "mes": 3
+      }}
+
+C) ACCIONES PERSONALIZADAS (NO CRUD)
+0. POST "/api/transacciones/transferencia/"
+    - Registra una transferencia real entre cuentas como dos transacciones (egreso e ingreso)
+    - Payload esperado: {{
+         "monto": 150.0,
+         "descripcion": "string",
+         "cuenta_origen": 1,
+         "cuenta_destino": 2
+      }}
+
+1. POST "/api/presupuestos/crear-repetitivas/"
+    - Crea varias transacciones programadas por rango mensual
+    - Payload esperado: {{
+         "monto": 100.0,
+         "descripcion": "string",
+         "categoria": 2,
+         "cuenta": 1,
+         "tipo_periodo": "MES",
+         "anio": 2026,
+         "mes_inicio": 4,
+         "mes_fin": 12,
+         "porcentaje": 10.0, (opcional)
+         "transaccion_base_descripcion": "Salario" (opcional)
+      }}
+
+2. POST "/api/presupuestos/con-interes/"
+    - Planea transacciones programadas con interes para EGRESO (cuotas hasta agotar total) o INGRESO (rendimientos por periodos)
+    - Payload esperado: {{
+         "monto_base": 1000.0,
+         "tasa_interes": 10.0,
+         "numero_periodos": 6,
+         "descripcion": "string",
+         "categoria": 2,
+         "cuenta": 1,
+         "anio_inicio": 2026,
+         "mes_inicio": 4,
+         "tipo_periodo": "MES",
+         "capitalizar": true
+      }}
+
+3. PATCH "/api/presupuestos/{id}/ejecutar/"
+    - Ejecuta una transaccion programada y la marca como EJECUTADA
+
+4. GET "/api/presupuestos/consolidado-mensual/"
+        - Retorna consolidado mensual de presupuestos
+        - Query params esperados: {{
+                 "mes": 4,
+                 "anio": 2026
+            }}
+
+        5. POST "/api/presupuestos/transferencia/"
+            - Programa una transferencia futura entre cuentas como dos presupuestos (egreso e ingreso)
+            - Payload esperado: {{
+                 "monto": 150.0,
+                 "descripcion": "string",
+                 "cuenta_origen": 1,
+                 "cuenta_destino": 2,
+                 "tipo_periodo": "MES" (también es posible "SEMANA" o "DIA"), 
+                 "anio": 2026,
+                 "mes": 6,
+                 "semana" : 0 (opcional),
+                 "fecha_exacta": 24/04/2026 (opcional, usar cuando el periodo es tipo DIA)
+              }}
+        - Respuesta esperada: {{
+                 "mes": 4,
+                 "anio": 2026,
+                 "total_gastos": "300.00",
+                 "total_ingresos": "1000.00",
+                 "excedente_mensual": "700.00"
+            }}
 
 Ejemplo de respuesta en un paso de tu ejecución:
 {{
@@ -268,7 +298,8 @@ Ejemplo de respuesta en un paso de tu ejecución:
 }}
 
 INSTRUCCIÓN ESTRICTA: Cuando debas ejecutar acciones o buscar IDs, tu respuesta debe ser SÓLO Y EXCLUSIVAMENTE un único objeto JSON que contenga la lista "acciones". NO incluyas explicaciones en texto, saludos ni advertencias. Solo el JSON.
-Además, REGLA IMPORTANTE DE EFICIENCIA: Siempre que vayas a realizar acciones de tipo GET, y consideres que es posible utilizar filtros (como mes, categoria, nombre, etc. según se te expuso antes), USALOS. El objetivo es mantener las peticiones y respuestas lo más pequeñas y precisas posibles.
+Además, REGLA IMPORTANTE DE EFICIENCIA: Siempre que vayas a realizar acciones de tipo GET, y consideres que es posible utilizar filtros (como mes, categoria, nombre, etc. según se te expuso antes), USALOS. Para consultas de presupuestos prioriza filtrar por "categoria" antes que por "descripcion" cuando la categoria sea deducible; si debes filtrar por "descripcion", usa UNA palabra clave en lugar de un texto largo. El objetivo es mantener las peticiones y respuestas lo más pequeñas y precisas posibles.
+REGLA DE CONSULTA DE DOCUMENTACION: No llames "/api/schema/" en cada solicitud. Usalo solo cuando tengas duda real del contrato de un endpoint, y luego continúa con llamadas filtradas y específicas.
 """
     
     print(f"\n[Usuario]: {user_prompt}\n")
@@ -373,27 +404,34 @@ Además, REGLA IMPORTANTE DE EFICIENCIA: Siempre que vayas a realizar acciones d
             print(f"Error procesando la respuesta JSON de la IA: {e}")
 
         # Guardar en base de datos la interaccion
+        interaccion_id = None
         try:
-            InteraccionIA.objects.create(
+            interaccion = InteraccionIA.objects.create(
                 usuario_prompt=user_prompt,
                 contexto=contexto_rag,
                 respuesta_ia=respuesta_ia,
                 acciones_ejecutadas=json.dumps(acciones_a_ejecutar) if 'acciones_a_ejecutar' in locals() and acciones_a_ejecutar else "",
                 exitosa=True
             )
+            interaccion_id = interaccion.id
         except Exception as e:
             print(f"No se pudo guardar la interaccion: {e}")
 
         # Si no es ninguna de las acciones o el flujo terminó, es una respuesta normal
         print("\n[Asistente Financiero]:")
         print(respuesta_ia)
-        return {"respuesta": respuesta_ia} # Salimos del ciclo y retornamos
+        return {
+            "respuesta": respuesta_ia,
+            "id": interaccion_id,
+        } # Salimos del ciclo y retornamos
     else:
+        interaccion_id = None
         try:
-            InteraccionIA.objects.create(usuario_prompt=user_prompt, contexto=contexto_rag, respuesta_ia="Reached maximum iterations without final action.", exitosa=False)
+            interaccion = InteraccionIA.objects.create(usuario_prompt=user_prompt, contexto=contexto_rag, respuesta_ia="Reached maximum iterations without final action.", exitosa=False)
+            interaccion_id = interaccion.id
         except:
             pass
-        return {"respuesta": "No se pudo concretar la acción final."}
+        return {"respuesta": "No se pudo concretar la acción final.", "id": interaccion_id}
 
 if __name__ == "__main__":
     import argparse
