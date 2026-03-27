@@ -1,8 +1,11 @@
+
+from apiTransacciones.models.programacion_model import ProgramacionTransaccion
+import calendar
 from datetime import datetime, timedelta
+from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
-from apiTransacciones.models.programacion_model import ProgramacionTransaccion
-
+from apiTransacciones.helpers.recurring_ocurrences import get_recurring_occurrences
 
 class ProgramacionTransaccionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -82,3 +85,122 @@ class ProgramacionTransaccionDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProgramacionTransaccion
         fields = '__all__'
+
+class PresupuestoConsolidadoPorCuentaSerializer(serializers.Serializer):
+    cuenta = serializers.SerializerMethodField()
+    total_gastos_mes_actual = serializers.DecimalField(max_digits=32, decimal_places=2)
+    total_gastos_siguiente_mes = serializers.DecimalField(max_digits=32, decimal_places=2)
+    excedente_presupuestal_mes_actual = serializers.DecimalField(max_digits=32, decimal_places=2)
+    excedente_presupuestal_siguiente_mes = serializers.DecimalField(max_digits=32, decimal_places=2)
+    excedente_general = serializers.DecimalField(max_digits=32, decimal_places=2)
+    transacciones_programadas_mes_actual = serializers.ListField(child=serializers.DictField())
+    transacciones_programadas_mes_siguiente = serializers.ListField(child=serializers.DictField())
+
+    def get_cuenta(self, obj):
+        return {
+            'id': obj.id,
+            'nombre': obj.nombre,
+            'saldo': obj.saldo
+        }
+
+    def to_representation(self, instance):
+        """
+        instance is a Cuenta object.
+        We compute the metrics using the programaciones passed via context.
+        """
+        programaciones = self.context.get('programaciones', [])
+        today = timezone.now().date()
+
+        # --- Rango del mes actual (desde hoy hasta fin de mes) ---
+        current_start = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+        if today.month == 12:
+            current_end_date = datetime(today.year, 12, 31).date()
+        else:
+            current_end_date = datetime(today.year, today.month + 1, 1).date() - timedelta(days=1)
+        current_end = timezone.make_aware(datetime.combine(current_end_date, datetime.max.time()))
+
+        # --- Rango del mes siguiente ---
+        if today.month == 12:
+            next_month_start = datetime(today.year + 1, 1, 1).date()
+        else:
+            next_month_start = datetime(today.year, today.month + 1, 1).date()
+        _, last_day = calendar.monthrange(next_month_start.year, next_month_start.month)
+        next_month_end = datetime(next_month_start.year, next_month_start.month, last_day).date()
+        next_start = timezone.make_aware(datetime.combine(next_month_start, datetime.min.time()))
+        next_end = timezone.make_aware(datetime.combine(next_month_end, datetime.max.time()))
+
+        gastos_actual = Decimal('0.00')
+        gastos_siguiente = Decimal('0.00')
+        ingresos_actual = Decimal('0.00')
+        ingresos_siguiente = Decimal('0.00')
+        transacciones_actual = []
+        transacciones_siguiente = []
+
+        # Filtrar programaciones de esta cuenta
+        for prog in programaciones:
+            if prog.cuenta.id != instance.id:
+                continue
+
+            es_egreso = prog.categoria.egreso
+            monto = prog.monto
+
+            if prog.frecuencia == 'UNICA':
+                fecha = prog.fecha_programada
+                if current_start <= fecha <= current_end:
+                    if es_egreso:
+                        gastos_actual += monto
+                    else:
+                        ingresos_actual += monto
+                    transacciones_actual.append(self._build_transaction_dict(prog, fecha))
+                elif next_start <= fecha <= next_end:
+                    if es_egreso:
+                        gastos_siguiente += monto
+                    else:
+                        ingresos_siguiente += monto
+                    transacciones_siguiente.append(self._build_transaction_dict(prog, fecha))
+            else:
+                # Recurrente
+                for fecha in get_recurring_occurrences(prog, current_start, current_end):
+                    if es_egreso:
+                        gastos_actual += monto
+                    else:
+                        ingresos_actual += monto
+                    transacciones_actual.append(self._build_transaction_dict(prog, fecha))
+
+                for fecha in get_recurring_occurrences(prog, next_start, next_end):
+                    if es_egreso:
+                        gastos_siguiente += monto
+                    else:
+                        ingresos_siguiente += monto
+                    transacciones_siguiente.append(self._build_transaction_dict(prog, fecha))
+
+        saldo = instance.saldo
+        excedente_actual = saldo - gastos_actual
+        excedente_siguiente = ingresos_siguiente - gastos_siguiente
+        excedente_general = excedente_actual + excedente_siguiente
+
+        data = {
+            'cuenta': self.get_cuenta(instance),
+            'total_gastos_mes_actual': gastos_actual,
+            'total_gastos_siguiente_mes': gastos_siguiente,
+            'excedente_presupuestal_mes_actual': excedente_actual,
+            'excedente_presupuestal_siguiente_mes': excedente_siguiente,
+            'excedente_general': excedente_general,
+            'transacciones_programadas_mes_actual': transacciones_actual,
+            'transacciones_programadas_mes_siguiente': transacciones_siguiente,
+        }
+        return data
+
+    def _build_transaction_dict(self, programacion, fecha):
+        return {
+            'id': programacion.id,
+            'fecha': fecha.isoformat(),
+            'monto': programacion.monto,
+            'descripcion': programacion.descripcion,
+            'categoria': programacion.categoria.nombre,
+            'tipo': 'gasto' if programacion.categoria.egreso else 'ingreso',
+        }
+
+
+#class PresupuestoConsolidadoListSerializer(serializers.ListSerializer):
+#    child = PresupuestoConsolidadoPorCuentaSerializer()

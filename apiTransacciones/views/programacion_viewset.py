@@ -3,9 +3,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.urls import reverse
 
+from apiCuentas.models.cuenta_model import Cuenta
+
 from apiTransacciones.helpers.next_date import _calculate_next_date
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, date, timedelta
+import calendar
+from django.db.models import Sum
+
+from decimal import Decimal
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -16,8 +22,10 @@ from apiTransacciones.models.programacion_model import ProgramacionTransaccion
 from apiTransacciones.serializers.programacion_serializer import (
     ProgramacionTransaccionSerializer,
     ProgramacionTransaccionListSerializer,
-    ProgramacionTransaccionDetailSerializer
+    ProgramacionTransaccionDetailSerializer,
+    PresupuestoConsolidadoPorCuentaSerializer
 )
+
 from apiTransacciones.filters.programacion_filter import ProgramacionTransaccionFilter
 
 
@@ -237,3 +245,24 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
                 'url': programacion_url,
             }
         }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'], url_path='presupuesto-consolidado')
+    def presupuesto_consolidado(self, request):
+        cuentas_ids = request.query_params.getlist('cuentas')
+        if cuentas_ids:
+            cuentas = Cuenta.objects.filter(id__in=cuentas_ids)
+        else:
+            cuentas = Cuenta.objects.all()
+
+        programaciones = ProgramacionTransaccion.objects.filter(
+            estado='PENDIENTE',
+            activa=True
+        )
+
+        # Usar el serializador por cuenta con many=True
+        serializer = PresupuestoConsolidadoPorCuentaSerializer(
+            cuentas,
+            many=True,
+            context={'programaciones': programaciones}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
