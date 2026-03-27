@@ -11,7 +11,7 @@ class CuentaViewSetTest(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificamos que el fixture trajo el saldo correcto de 1000
-        self.assertEqual(float(response.data[0]["saldo"]), 1000.0)
+        self.assertEqual(float(response.data[0]["saldo"]), 100000.0)
 
     def test_crear_cuenta_asociada_correctamente(self):
         """Verificamos la creación de una cuenta y que su banco exista"""

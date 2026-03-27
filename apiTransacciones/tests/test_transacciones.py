@@ -2,7 +2,7 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
 from django.utils import timezone
-import datetime
+from datetime import datetime
 from decimal import Decimal
 from apiCuentas.models.cuenta_model import Cuenta
 from apiTransacciones.models.transaccion_model import Transaccion
@@ -33,7 +33,7 @@ class TransaccionViewSetTest(APITestCase):
             "descripcion": "Gasto de prueba",
             "categoria": self.categoria_egreso.id,
             "cuenta": self.cuenta_origen.id,
-            "fecha_ejecucion": timezone.now().isoformat()
+            "fecha_ejecucion": timezone.now()
         }
 
     def test_creacion_transaccion_egreso_exitosa(self):
@@ -53,7 +53,7 @@ class TransaccionViewSetTest(APITestCase):
             "descripcion": "Ingreso de prueba",
             "categoria": self.categoria_ingreso.id,
             "cuenta": self.cuenta_destino.id,
-            "fecha_ejecucion": timezone.now().isoformat()
+            "fecha_ejecucion": str(timezone.now())
         }
         response = self.client.post(self.list_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -62,9 +62,9 @@ class TransaccionViewSetTest(APITestCase):
         self.assertEqual(self.cuenta_destino.saldo, saldo_inicial + Decimal('200000.00'))
 
     def test_creacion_transaccion_futura_error(self):
-        fecha_manana = (timezone.now() + timezone.timedelta(days=1)).isoformat()
+        fecha_manana = str(timezone.now() + timezone.timedelta(days=1))
         data = self.transaccion_data_egreso.copy()
-        data["fecha_ejecucion"] = fecha_manana.isoformat()
+        data["fecha_ejecucion"] = str(fecha_manana)
         
         response = self.client.post(self.list_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -95,7 +95,7 @@ class TransaccionViewSetTest(APITestCase):
             "cuenta_destino": self.cuenta_destino.id,
             "monto": "30000.00",
             "descripcion": "Transferencia de prueba",
-            "fecha_ejecucion": timezone.now().isoformat()
+            "fecha_ejecucion": timezone.now()
         }
 
         response = self.client.post(self.transferir_url, data, format='json')
@@ -118,14 +118,14 @@ class TransaccionViewSetTest(APITestCase):
             descripcion="Pago de internet",
             categoria=self.categoria_egreso,
             cuenta=self.cuenta_origen,
-            fecha_ejecucion=(timezone.now() - timezone.timedelta(days=2)).isoformat()
+            fecha_ejecucion=timezone.now() - timezone.timedelta(days=2)
         )
         Transaccion.objects.create(
             monto=Decimal('50000.00'),
             descripcion="Salario quincenal",
             categoria=self.categoria_ingreso,
             cuenta=self.cuenta_destino,
-            fecha_ejecucion=timezone.now().isoformat()
+            fecha_ejecucion=timezone.now()
         )
 
         # Filtro por categoría
@@ -155,7 +155,7 @@ class TransaccionViewSetTest(APITestCase):
             descripcion="Para eliminar",
             categoria=self.categoria_egreso,
             cuenta=self.cuenta_origen,
-            fecha_ejecucion=timezone.now().isoformat()
+            fecha_ejecucion=timezone.now()
         )
         url_detalle = reverse('transaccion-detail', kwargs={'pk': t.id})
         
@@ -169,7 +169,7 @@ class TransaccionViewSetTest(APITestCase):
             descripcion="Antes de edit",
             categoria=self.categoria_egreso,
             cuenta=self.cuenta_origen,
-            fecha_ejecucion=timezone.now().isoformat()
+            fecha_ejecucion=timezone.now()
         )
         url_detalle = reverse('transaccion-detail', kwargs={'pk': t.id})
         
@@ -178,7 +178,7 @@ class TransaccionViewSetTest(APITestCase):
             "descripcion": "Despues de edit",
             "categoria": self.categoria_egreso.id,
             "cuenta": self.cuenta_origen.id,
-            "fecha_ejecucion": t.fecha_ejecucion.isoformat()
+            "fecha_ejecucion": t.fecha_ejecucion
         }
         
         response = self.client.put(url_detalle, data, format='json')

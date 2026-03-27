@@ -7,6 +7,8 @@ from apiTransacciones.serializers.transaccion_serializer import TransaccionSeria
 from apiTransacciones.serializers.transferencia_serializer import TransferenciaSerializer
 from apiTransacciones.filters.transaccion_filter import TransaccionFilter
 
+
+
 class TransaccionViewSet(viewsets.ModelViewSet):
     queryset = Transaccion.objects.all()
     serializer_class = TransaccionSerializer
@@ -20,12 +22,4 @@ class TransaccionViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response({'status': 'Transferencia creada exitosamente'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['post'], url_path='ejecutar')
-    def ejecutar(self, request, pk=None):
-        transaccion = self.get_object()
-        serializer = EjecutarTransaccionSerializer(transaccion, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({'status': 'Transacción ejecutada exitosamente', 'data': serializer.data}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    

@@ -1,5 +1,5 @@
 import calendar
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from django.utils import timezone
 from rest_framework import serializers
 from django.utils import timezone
@@ -17,8 +17,11 @@ class TransaccionSerializer(serializers.ModelSerializer):
         cuenta = data.get('cuenta')
         monto = data.get('monto')
 
+        if isinstance(fecha_ejecucion, str):
+            fecha_ejecucion = datetime.strptime(fecha_ejecucion, "%Y-%m-%d")
+
         if fecha_ejecucion:
-            if date(fecha_ejecucion)> timezone.now():
+            if fecha_ejecucion > timezone.now():
                 raise serializers.ValidationError({'fecha_ejecucion':'La fecha de ejecucion no puede ser mayor que la fecha actual, para programar transacciones hacer uso de los endpoints de apiProgramacion'})
             
             if getattr(categoria, 'egreso', False) and cuenta and monto:

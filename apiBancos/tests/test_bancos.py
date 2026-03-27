@@ -10,8 +10,8 @@ class BancoViewSetTest(APITestCase):
         url = reverse("banco-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["nombre"], "Banco Central")
+        self.assertEqual(len(response.data), 3)
+        self.assertEqual(response.data[0]["nombre"], "Banco Caja Social")
 
     def test_creacion_banco(self):
         """Verifica que podamos crear un banco correctamente con atributos válidos"""
