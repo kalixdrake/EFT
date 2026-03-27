@@ -1,9 +1,12 @@
 from rest_framework import serializers
 from datetime import date
 from django.utils import timezone
+from django.db import transaction
 from apiCuentas.models.cuenta_model import Cuenta
 from apiTransacciones.models.transaccion_model import Transaccion
-from django.db import transaction
+from apiTransacciones.models.categorias_model import Categoria
+from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
+
 
 class TransferenciaSerializer(serializers.Serializer):
     cuenta_origen = serializers.PrimaryKeyRelatedField(queryset=Cuenta.objects.all())
@@ -12,29 +15,23 @@ class TransferenciaSerializer(serializers.Serializer):
     descripcion = serializers.CharField(max_length=255)
     fecha_ejecucion = serializers.DateTimeField(required=False, allow_null=True)
 
-    class Meta:
-        model = Transaccion
-        fields = [
-            'cuenta_origen',
-            'cuenta_destino',
-            'monto',
-            'descripcion',
-            'fecha_ejecucion'
-        ]
-
     def validate(self, data):
         if data['cuenta_origen'] == data['cuenta_destino']:
             raise serializers.ValidationError("La cuenta origen y destino no pueden ser la misma.")
-        
+
         fecha_ejecucion = data.get('fecha_ejecucion')
-        if fecha_ejecucion and fecha_ejecucion > timezone.now(): # Validation for future transactions
-            raise serializers.ValidationError({'fecha_ejecucion':'La fecha de ejecucion no puede ser mayor que la fecha actual, para programar transacciones hacer uso de los endpoints de apiProgramacion'})
-        
-        # Balance validation (only if it's not a future transaction where it hasn't executed yet)
-        if data.get('fecha_ejecucion'):
+        # Validar fecha futura
+        if fecha_ejecucion and fecha_ejecucion > timezone.now():
+            raise serializers.ValidationError({
+                'fecha_ejecucion': 'La fecha de ejecución no puede ser mayor que la fecha actual. '
+                                   'Para programar transacciones use los endpoints de apiProgramacion.'
+            })
+
+        # Validar saldo en cuenta origen para transacciones inmediatas (fecha nula o <= ahora)
+        if fecha_ejecucion is None or fecha_ejecucion <= timezone.now():
             if data['cuenta_origen'].saldo < data['monto']:
                 raise serializers.ValidationError({"monto": "Saldo insuficiente en cuenta origen."})
-        
+
         return data
 
     @transaction.atomic
@@ -43,34 +40,51 @@ class TransferenciaSerializer(serializers.Serializer):
         cuenta_destino = validated_data['cuenta_destino']
         monto = validated_data['monto']
         descripcion = validated_data['descripcion']
-        
-        # transferencia_ing = 10, transferencia_egr = 9
-        
-        # Egreso transaccion
-        tx_egreso = Transaccion.objects.create(
-            cuenta=cuenta_origen,
-            categoria_id=9,
-            monto=monto,
-            descripcion=descripcion,
-            fecha_ejecucion=validated_data.get('fecha_ejecucion')
-        )
-        # Ingreso transaccion
-        tx_ingreso = Transaccion.objects.create(
-            cuenta=cuenta_destino,
-            categoria_id=10,
-            monto=monto, # could be positive everywhere, model depends on `egreso` in categoria
-            descripcion=descripcion,
-            fecha_ejecucion=validated_data.get('fecha_ejecucion')
-        )
-        
-        # If it's modifying immediately:
-        if validated_data.get('fecha_ejecucion'):
-            cuenta_origen.saldo -= monto
-            cuenta_origen.save()
-            
-            cuenta_destino.saldo += monto
-            cuenta_destino.save()
+        fecha_ejecucion = validated_data.get('fecha_ejecucion')
 
-        return tx_egreso # return one representation or arbitrary dict
+        # Si no se especificó fecha, se usa la actual (transacción inmediata)
+        if fecha_ejecucion is None:
+            fecha_ejecucion = timezone.now()
 
-    
+        # Obtener categorías fijas: egreso (9) e ingreso (10)
+        try:
+            categoria_egreso = Categoria.objects.get(id=9)
+            categoria_ingreso = Categoria.objects.get(id=10)
+        except Categoria.DoesNotExist:
+            raise serializers.ValidationError("Categorías de transferencia no encontradas.")
+
+        # Datos para transacción de egreso (cuenta origen)
+        data_egreso = {
+            'cuenta': cuenta_origen.id,
+            'categoria': categoria_egreso.id,
+            'monto': monto,
+            'descripcion': descripcion,
+            'fecha_ejecucion': fecha_ejecucion,
+        }
+        # Datos para transacción de ingreso (cuenta destino)
+        data_ingreso = {
+            'cuenta': cuenta_destino.id,
+            'categoria': categoria_ingreso.id,
+            'monto': monto,
+            'descripcion': descripcion,
+            'fecha_ejecucion': fecha_ejecucion,
+        }
+
+        # Crear serializers y guardar
+        serializer_egreso = TransaccionSerializer(data=data_egreso)
+        serializer_ingreso = TransaccionSerializer(data=data_ingreso)
+
+        # Validar y guardar ambas dentro de la transacción atómica
+        if not serializer_egreso.is_valid():
+            raise serializers.ValidationError(serializer_egreso.errors)
+        if not serializer_ingreso.is_valid():
+            raise serializers.ValidationError(serializer_ingreso.errors)
+
+        tx_egreso = serializer_egreso.save()
+        tx_ingreso = serializer_ingreso.save()
+
+        # Retornar ambas (aunque la vista no lo usa, es útil para debugging)
+        return {
+            'egreso': tx_egreso,
+            'ingreso': tx_ingreso,
+        }

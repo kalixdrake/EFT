@@ -14,6 +14,10 @@ django.setup()
 
 # Importar los modelos necesarios
 from apiTransacciones.models.transaccion_model import Transaccion
+from apiTransacciones.models.programacion_model import ProgramacionTransaccion
+from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
+from apiTransacciones.serializers.transferencia_serializer import TransferenciaSerializer
+from apiTransacciones.serializers.programacion_serializer import ProgramacionTransaccionSerializer
 
 from apiCuentas.models.cuenta_model import Cuenta
 from apiBancos.models.banco_model import Banco
@@ -27,18 +31,32 @@ def obtener_historial_transacciones():
         cuentas = Cuenta.objects.all()
         resumen_cuentas = "Cuentas actuales:\n"
         for c in cuentas:
-            resumen_cuentas += f"- ID: {c.id} | Banco: {c.banco.nombre} | Saldo: ${c.saldo}\n"
+            nombre_cuenta = f" | Nombre: {c.nombre}" if c.nombre else ""
+            resumen_cuentas += f"- ID: {c.id} | Banco: {c.banco.nombre}{nombre_cuenta} | Saldo: ${c.saldo}\n"
 
         # Obtener transacciones
         transacciones = Transaccion.objects.all().order_by('-id')[:30]
         historial = "Últimas transacciones:\n"
         for t in transacciones:
-            tipo_nombre = t.tipo.accion if t.tipo and t.tipo.accion else "N/A"
-            origen = f"{t.cuenta_origen.id}" if t.cuenta_origen else "N/A"
-            destino = f"{t.cuenta_destino.id}" if t.cuenta_destino else "N/A"
-            historial += f"- {t.fecha.strftime('%Y-%m-%d')} | Desc: {t.descripcion} | Monto: ${t.monto} | Tipo: {tipo_nombre} | Origen: {origen} | Destino: {destino}\n"
+            tipo_nombre = "EGRESO" if t.categoria and t.categoria.egreso else "INGRESO"
+            cuenta = f"{t.cuenta.id}" if t.cuenta else "N/A"
+            fecha_ejecucion = t.fecha_ejecucion.strftime('%Y-%m-%d') if t.fecha_ejecucion else "N/A"
+            historial += f"- {fecha_ejecucion} | Desc: {t.descripcion} | Monto: ${t.monto} | Tipo: {tipo_nombre} | Cuenta: {cuenta}\n"
+
+        # Obtener programaciones futuras
+        programaciones = ProgramacionTransaccion.objects.filter(
+            estado='PENDIENTE',
+            activa=True
+        ).order_by('fecha_programada')[:20]
+        resumen_programadas = "\nTransacciones programadas (pendientes):\n"
+        for p in programaciones:
+            fecha_programada = p.fecha_programada.strftime('%Y-%m-%d')
+            resumen_programadas += (
+                f"- {fecha_programada} | Desc: {p.descripcion} | Monto: ${p.monto} | "
+                f"Frecuencia: {p.frecuencia} | Cuenta: {p.cuenta.id} | Categoria: {p.categoria.nombre}\n"
+            )
         
-        return f"{resumen_cuentas}\n{historial}"
+        return f"{resumen_cuentas}\n{historial}{resumen_programadas}"
     except Exception as e:
         return f"Error al obtener historial: {str(e)}"
 
@@ -47,48 +65,130 @@ def crear_cuenta(datos):
     try:
         nombre_banco = datos.get('banco_nombre', 'Banco Desconocido')
         saldo = datos.get('saldo_inicial', 0.0)
+        numero = datos.get('numero')
+        nombre_cuenta = datos.get('nombre')
         
         banco, created = Banco.objects.get_or_create(nombre=nombre_banco)
-        cuenta = Cuenta.objects.create(banco=banco, saldo=saldo)
+        cuenta = Cuenta.objects.create(
+            banco=banco,
+            saldo=saldo,
+            numero=numero,
+            nombre=nombre_cuenta
+        )
         
         return {"status": "success", "message": f"Cuenta ID {cuenta.id} creada en {banco.nombre} con saldo inicial de ${saldo}."}
     except Exception as e:
         return {"status": "error", "message": f"Error al crear cuenta: {str(e)}"}
 
 def crear_transaccion(datos):
-    """Crea una transacción en la base de datos."""
+    """Crea una transacción inmediata en la base de datos."""
     try:
-        # Extraer orígenes y destinos (puede ser null)
-        origen_id = datos.get('cuenta_origen_id')
-        destino_id = datos.get('cuenta_destino_id')
-        
-        cuenta_origen = Cuenta.objects.get(id=origen_id) if origen_id else None
-        cuenta_destino = Cuenta.objects.get(id=destino_id) if destino_id else None
-        
-        # Categoria
-        categoria_nombre = datos.get('categoria')
-        categoria = None
-        tipo = None
-        if categoria_nombre:
-            categoria = CategoriaTransaccion.objects.filter(nombre__iexact=categoria_nombre).first()
-            tipo = categoria.TipoTransaccion if categoria else None
+        cuenta_id = datos.get('cuenta_id') or datos.get('cuenta')
+        categoria_id = datos.get('categoria_id') or datos.get('categoria')
+        monto = datos.get('monto')
+        descripcion = datos.get('descripcion')
+        fecha_ejecucion = datos.get('fecha_ejecucion')
 
-        if not categoria or not tipo:
-            return {
-                "status": "error",
-                "message": "Se requiere categoria con tipo configurado para crear transacciones."
-            }
+        if not cuenta_id or not categoria_id:
+            return {"status": "error", "message": "Se requiere 'cuenta' y 'categoria' para crear una transacción."}
 
-        transaccion = Transaccion.objects.create(
-            cuenta_origen=cuenta_origen,
-            cuenta_destino=cuenta_destino,
-            monto=datos['monto'],
-            descripcion=datos['descripcion'],
-            categoria=categoria
-        )
-        return {"status": "success", "message": f"Transacción de ${transaccion.monto} creada para '{transaccion.descripcion}' exitosamente."}
+        if not monto or not descripcion:
+            return {"status": "error", "message": "Se requiere 'monto' y 'descripcion' para crear una transacción."}
+
+        if fecha_ejecucion is None:
+            fecha_ejecucion = datetime.now().strftime("%Y-%m-%d")
+
+        payload = {
+            "cuenta": cuenta_id,
+            "categoria": categoria_id,
+            "monto": monto,
+            "descripcion": descripcion,
+            "fecha_ejecucion": fecha_ejecucion,
+        }
+
+        serializer = TransaccionSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        transaccion = serializer.save()
+
+        return {
+            "status": "success",
+            "message": f"Transacción ID {transaccion.id} creada por ${transaccion.monto} ('{transaccion.descripcion}')."
+        }
     except Exception as e:
         return {"status": "error", "message": f"Error al crear transacción: {str(e)}"}
+
+def crear_programacion(datos):
+    """Crea una transacción programada/futura en la base de datos."""
+    try:
+        cuenta_id = datos.get('cuenta_id') or datos.get('cuenta')
+        categoria_id = datos.get('categoria_id') or datos.get('categoria')
+        monto = datos.get('monto')
+        descripcion = datos.get('descripcion')
+        fecha_programada = datos.get('fecha_programada')
+        frecuencia = datos.get('frecuencia', 'UNICA')
+        fecha_fin_repeticion = datos.get('fecha_fin_repeticion')
+
+        if not cuenta_id or not categoria_id:
+            return {"status": "error", "message": "Se requiere 'cuenta' y 'categoria' para crear una programación."}
+        if not monto or not descripcion or not fecha_programada:
+            return {"status": "error", "message": "Se requiere 'monto', 'descripcion' y 'fecha_programada'."}
+
+        payload = {
+            "cuenta": cuenta_id,
+            "categoria": categoria_id,
+            "monto": monto,
+            "descripcion": descripcion,
+            "fecha_programada": fecha_programada,
+            "frecuencia": frecuencia,
+        }
+        if frecuencia != 'UNICA' and not fecha_fin_repeticion:
+            return {"status": "error", "message": "Se requiere 'fecha_fin_repeticion' para programaciones recurrentes."}
+        if frecuencia != 'UNICA':
+            payload["fecha_fin_repeticion"] = fecha_fin_repeticion
+
+        serializer = ProgramacionTransaccionSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        programacion = serializer.save()
+
+        return {
+            "status": "success",
+            "message": f"Programación ID {programacion.id} creada para {programacion.fecha_programada}."
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Error al crear programación: {str(e)}"}
+
+def crear_transferencia(datos):
+    """Crea una transferencia inmediata entre cuentas como doble transacción."""
+    try:
+        cuenta_origen_id = datos.get('cuenta_origen_id') or datos.get('cuenta_origen')
+        cuenta_destino_id = datos.get('cuenta_destino_id') or datos.get('cuenta_destino')
+        monto = datos.get('monto')
+        descripcion = datos.get('descripcion')
+        fecha_ejecucion = datos.get('fecha_ejecucion')
+
+        if not cuenta_origen_id or not cuenta_destino_id:
+            return {"status": "error", "message": "Se requiere 'cuenta_origen' y 'cuenta_destino'."}
+        if not monto or not descripcion:
+            return {"status": "error", "message": "Se requiere 'monto' y 'descripcion'."}
+
+        payload = {
+            "cuenta_origen": cuenta_origen_id,
+            "cuenta_destino": cuenta_destino_id,
+            "monto": monto,
+            "descripcion": descripcion,
+            "fecha_ejecucion": fecha_ejecucion,
+        }
+
+        serializer = TransferenciaSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return {
+            "status": "success",
+            "message": "Transferencia creada exitosamente."
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Error al crear transferencia: {str(e)}"}
 
 def obtener_memoria_ia():
     try:
@@ -150,7 +250,7 @@ Por ejemplo, si no sabes el ID de una cuenta o categoría:
 NUNCA asumas IDs, ni pidas disculpas diciendo "no puedo hacer llamadas secuenciales", porque SÍ puedes. Está completamente diseñado para que operes en pasos lógicos.
 SIEMPRE que uses el modo de acciones, tu respuesta debe ser ÚNICAMENTE un objeto JSON válido (sin texto extra fuera de él).
 
-REGLA IMPORTANTE PARA TRANSACCIONES FUTURAS: Si el usuario indica que "debe realizar" un movimiento, "tiene una deuda", "tiene que hacer un pago", o se refiere a un gasto o ingreso en el futuro, ESTO NO ES UNA TRANSACCIÓN NORMAL. DEBES registrarlo como una Transacción Programada llamando al POST de "/api/presupuestos/". Utiliza el POST de "/api/transacciones/" ÚNICAMENTE para movimientos que ya ocurrieron o se efectúan en este preciso momento.
+REGLA IMPORTANTE PARA TRANSACCIONES FUTURAS: Si el usuario indica que "debe realizar" un movimiento, "tiene una deuda", "tiene que hacer un pago", o se refiere a un gasto o ingreso en el futuro, ESTO NO ES UNA TRANSACCIÓN NORMAL. DEBES registrarlo como una Transacción Programada llamando al POST de "/api/programaciones/". Utiliza el POST de "/api/transacciones/" ÚNICAMENTE para movimientos que ya ocurrieron o se efectúan en este preciso momento.
 
 ENDPOINTS DISPONIBLES (FORMATO REFACTORIZADO):
 
@@ -171,122 +271,75 @@ Recursos base:
     - Filtro recomendado en GET: "nombre"
     - POST esperado: {{"nombre": "string"}}
 
-2. "/api/categorias-transaccion/"
-    - POST esperado: {{"nombre": "string", "descripcion": "string"}}
+2. "/api/categorias/"
+    - Filtros disponibles en GET: "egreso"
+    - POST esperado: {{"nombre": "string", "descripcion": "string", "egreso": true}}
 
-3. "/api/tipos-transaccion/"
-    - Usalo para resolver IDs de tipos (INGRESO, EGRESO, TRANSFERENCIA, etc.)
-
-4. "/api/cuentas/"
+3. "/api/cuentas/"
     - Filtros recomendados en GET: "nombre", "banco"
     - POST esperado: {{"banco": 1, "saldo": 1000.0, "numero": 1234, "nombre": "Opcional"}}
     - IMPORTANTE: "banco" siempre es ID numerico
 
-5. "/api/transacciones/"
+4. "/api/transacciones/"
+    - Filtros disponibles en GET: "fecha_min", "fecha_max", "monto_min", "monto_max", "descripcion", "categoria", "cuenta", "from_programacion"
     - POST esperado: {{
          "monto": 150.0,
          "descripcion": "string",
          "categoria": 2,
-         "cuenta_origen": 1,
-         "cuenta_destino": 2
+         "cuenta": 1,
+                 "fecha_ejecucion": "2026-03-27T10:00:00Z"
       }}
-    - IMPORTANTE: el tipo se infiere desde la categoria (categoria.TipoTransaccion)
-    - Para hechos FUTUROS usa presupuestos, no transacciones directas
+        - IMPORTANTE: la fecha no puede ser futura. Para hechos FUTUROS usa programaciones.
 
-7. CATEGORIAS DE TRANSFERENCIA
-        - Para transferencias entre cuentas usa categorias especiales:
-            - "transferencia_egr" para salida
-            - "transferencia_ing" para entrada
-        - El sistema crea doble movimiento (egreso + ingreso) con acciones personalizadas.
-
-6. "/api/presupuestos/"
-    - Filtros disponibles en GET: "tipo" (derivado de categoria), "categoria", "mes", "descripcion", "estado", "transaccion_aplicada_isnull"
+5. "/api/programaciones/"
+    - Filtros disponibles en GET: "fecha_min", "fecha_max", "monto_min", "monto_max", "descripcion", "categoria", "cuenta", "estado", "frecuencia", "activa"
     - POST esperado: {{
          "monto": 100.0,
          "descripcion": "string",
          "categoria": 2,
          "cuenta": 1,
-         "tipo_periodo": "MES",
-         "anio": 2026,
-         "mes": 3
+         "fecha_programada": "2026-04-15T10:00:00Z",
+         "frecuencia": "UNICA",
+         "fecha_fin_repeticion": "2026-12-15T10:00:00Z"
       }}
+    - IMPORTANTE: si "frecuencia" != "UNICA" debes incluir "fecha_fin_repeticion".
+    - IMPORTANTE: "fecha_programada" debe ser futura.
 
 C) ACCIONES PERSONALIZADAS (NO CRUD)
-0. POST "/api/transacciones/transferencia/"
+0. POST "/api/transacciones/transferir/"
     - Registra una transferencia real entre cuentas como dos transacciones (egreso e ingreso)
     - Payload esperado: {{
          "monto": 150.0,
          "descripcion": "string",
          "cuenta_origen": 1,
-         "cuenta_destino": 2
+         "cuenta_destino": 2,
+         "fecha_ejecucion": "2026-03-27T10:00:00Z" (opcional)
       }}
+    - NOTA: Aunque el schema pueda listar un objeto Transaccion, este endpoint usa cuenta_origen y cuenta_destino.
 
-1. POST "/api/presupuestos/crear-repetitivas/"
-    - Crea varias transacciones programadas por rango mensual
-    - Payload esperado: {{
-         "monto": 100.0,
-         "descripcion": "string",
-         "categoria": 2,
-         "cuenta": 1,
-         "tipo_periodo": "MES",
-         "anio": 2026,
-         "mes_inicio": 4,
-         "mes_fin": 12,
-         "porcentaje": 10.0, (opcional)
-         "transaccion_base_descripcion": "Salario" (opcional)
-      }}
+1. GET "/api/programaciones/pendientes/"
+    - Lista programaciones pendientes y activas (acepta los mismos filtros que /api/programaciones/)
 
-2. POST "/api/presupuestos/con-interes/"
-    - Planea transacciones programadas con interes para EGRESO (cuotas hasta agotar total) o INGRESO (rendimientos por periodos)
-    - Payload esperado: {{
-         "monto_base": 1000.0,
-         "tasa_interes": 10.0,
-         "numero_periodos": 6,
-         "descripcion": "string",
-         "categoria": 2,
-         "cuenta": 1,
-         "anio_inicio": 2026,
-         "mes_inicio": 4,
-         "tipo_periodo": "MES",
-         "capitalizar": true
-      }}
+2. GET "/api/programaciones/activas/"
+    - Lista programaciones activas (acepta los mismos filtros que /api/programaciones/)
 
-3. PATCH "/api/presupuestos/{id}/ejecutar/"
-    - Ejecuta una transaccion programada y la marca como EJECUTADA
+3. POST "/api/programaciones/{id}/activar/"
+    - Activa una programación
 
-4. GET "/api/presupuestos/consolidado-mensual/"
-        - Retorna consolidado mensual de presupuestos
-        - Query params esperados: {{
-                 "mes": 4,
-                 "anio": 2026
-            }}
+4. POST "/api/programaciones/{id}/desactivar/"
+    - Desactiva una programación
 
-        5. POST "/api/presupuestos/transferencia/"
-            - Programa una transferencia futura entre cuentas como dos presupuestos (egreso e ingreso)
-            - Payload esperado: {{
-                 "monto": 150.0,
-                 "descripcion": "string",
-                 "cuenta_origen": 1,
-                 "cuenta_destino": 2,
-                 "tipo_periodo": "MES" (también es posible "SEMANA" o "DIA"), 
-                 "anio": 2026,
-                 "mes": 6,
-                 "semana" : 0 (opcional),
-                 "fecha_exacta": 24/04/2026 (opcional, usar cuando el periodo es tipo DIA)
-              }}
-        - Respuesta esperada: {{
-                 "mes": 4,
-                 "anio": 2026,
-                 "total_gastos": "300.00",
-                 "total_ingresos": "1000.00",
-                 "excedente_mensual": "700.00"
-            }}
+5. POST "/api/programaciones/{id}/cancelar/"
+    - Cancela una programación (no ejecutada)
+
+6. POST "/api/programaciones/{id}/ejecutar/"
+    - Ejecuta una transacción programada y genera la transacción real
 
 Ejemplo de respuesta en un paso de tu ejecución:
 {{
   "acciones": [
     {{
-      "endpoint": "/api/categorias-transaccion/",
+            "endpoint": "/api/categorias/",
       "method": "GET"
     }},
     {{
@@ -298,7 +351,7 @@ Ejemplo de respuesta en un paso de tu ejecución:
 }}
 
 INSTRUCCIÓN ESTRICTA: Cuando debas ejecutar acciones o buscar IDs, tu respuesta debe ser SÓLO Y EXCLUSIVAMENTE un único objeto JSON que contenga la lista "acciones". NO incluyas explicaciones en texto, saludos ni advertencias. Solo el JSON.
-Además, REGLA IMPORTANTE DE EFICIENCIA: Siempre que vayas a realizar acciones de tipo GET, y consideres que es posible utilizar filtros (como mes, categoria, nombre, etc. según se te expuso antes), USALOS. Para consultas de presupuestos prioriza filtrar por "categoria" antes que por "descripcion" cuando la categoria sea deducible; si debes filtrar por "descripcion", usa UNA palabra clave en lugar de un texto largo. El objetivo es mantener las peticiones y respuestas lo más pequeñas y precisas posibles.
+Además, REGLA IMPORTANTE DE EFICIENCIA: Siempre que vayas a realizar acciones de tipo GET, y consideres que es posible utilizar filtros (como fecha, categoria, nombre, etc. según se te expuso antes), USALOS. Para fechas usa ISO-8601 (ej: 2026-03-27T10:00:00Z). Para consultas de programaciones prioriza filtrar por "categoria" antes que por "descripcion" cuando la categoria sea deducible; si debes filtrar por "descripcion", usa UNA palabra clave en lugar de un texto largo. El objetivo es mantener las peticiones y respuestas lo más pequeñas y precisas posibles.
 REGLA DE CONSULTA DE DOCUMENTACION: No llames "/api/schema/" en cada solicitud. Usalo solo cuando tengas duda real del contrato de un endpoint, y luego continúa con llamadas filtradas y específicas.
 """
     

@@ -8,7 +8,6 @@ from apiTransacciones.serializers.transferencia_serializer import TransferenciaS
 from apiTransacciones.filters.transaccion_filter import TransaccionFilter
 
 
-
 class TransaccionViewSet(viewsets.ModelViewSet):
     queryset = Transaccion.objects.all()
     serializer_class = TransaccionSerializer
@@ -22,4 +21,15 @@ class TransaccionViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response({'status': 'Transferencia creada exitosamente'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    def perform_destroy(self, instance):
+        # Revertir el efecto de la transacción antes de eliminarla
+        cuenta = instance.cuenta
+        monto = instance.monto
+        categoria = instance.categoria
+        if categoria.egreso:
+            cuenta.saldo += monto   # Si era egreso, se devuelve el dinero
+        else:
+            cuenta.saldo -= monto   # Si era ingreso, se resta
+        cuenta.save()
+        instance.delete()
