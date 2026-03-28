@@ -1,5 +1,7 @@
 
 from apiTransacciones.models.programacion_model import ProgramacionTransaccion
+from apiTransacciones.helpers.next_date import _calculate_next_date
+from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
 import calendar
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -202,5 +204,79 @@ class PresupuestoConsolidadoPorCuentaSerializer(serializers.Serializer):
         }
 
 
-#class PresupuestoConsolidadoListSerializer(serializers.ListSerializer):
-#    child = PresupuestoConsolidadoPorCuentaSerializer()
+class EjecutarProgramacionSerializer(serializers.Serializer):
+    """
+    Serializer para ejecutar una transacción programada.
+    Realiza todas las validaciones y la creación de la transacción.
+    """
+    fecha_ejecucion = serializers.DateTimeField(required=False, input_formats=['iso-8601'])
+
+    def validate(self, attrs):
+        # Obtener la programación desde el contexto
+        programacion = self.context.get('programacion')
+        if not programacion:
+            raise serializers.ValidationError('No se proporcionó la programación.')
+
+        # Validar estado y activación
+        if programacion.estado != 'PENDIENTE':
+            raise serializers.ValidationError(
+                f'No se puede ejecutar una transacción en estado {programacion.estado}.'
+            )
+        if not programacion.activa:
+            raise serializers.ValidationError(
+                'La transacción programada está desactivada.'
+            )
+
+        # Fecha de ejecución: si no se envía, usar ahora
+        fecha = attrs.get('fecha_ejecucion')
+        if fecha is None:
+            fecha = timezone.now()
+        attrs['fecha_ejecucion'] = fecha
+
+        return attrs
+
+    def create(self, validated_data):
+        programacion = self.context.get('programacion')
+        fecha_ejecucion = validated_data['fecha_ejecucion']
+
+        # Crear la transacción real
+        try:
+            transaccion_data = {
+                'monto': programacion.monto,
+                'descripcion': programacion.descripcion,
+                'fecha_ejecucion': fecha_ejecucion,
+                'categoria': programacion.categoria.id,
+                'cuenta': programacion.cuenta.id,
+                'programacion': programacion.id,
+            }
+            trans_serializer = TransaccionSerializer(data=transaccion_data)
+            trans_serializer.is_valid(raise_exception=True)
+            transaccion = trans_serializer.save()
+        except Exception as e:
+            raise serializers.ValidationError(f'Error al crear la transacción: {str(e)}')
+
+        # Manejar recurrencia
+        if programacion.frecuencia == 'UNICA':
+            programacion.estado = 'EJECUTADA'
+            programacion.activa = False
+            programacion.fecha_ultima_ejecucion = fecha_ejecucion
+            message = 'Transacción ejecutada y programación finalizada.'
+        else:
+            # Calcular próxima fecha
+            next_date = _calculate_next_date(programacion.fecha_programada, programacion.frecuencia)
+            if programacion.fecha_fin_repeticion and next_date > programacion.fecha_fin_repeticion:
+                programacion.estado = 'EJECUTADA'
+                programacion.activa = False
+                message = 'Transacción ejecutada. La recurrencia ha finalizado.'
+            else:
+                programacion.fecha_programada = next_date
+                programacion.fecha_ultima_ejecucion = fecha_ejecucion
+                message = f'Transacción ejecutada. Próxima ejecución programada para {next_date}'
+
+        programacion.save()
+
+        return {
+            'transaccion': transaccion,
+            'programacion': programacion,
+            'message': message,
+        }

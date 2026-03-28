@@ -3,12 +3,37 @@ import sys
 import json
 import django
 from datetime import datetime
-from llama_cpp import Llama
+
+try:
+    from llama_cpp import Llama
+except Exception:
+    Llama = None
 
 import requests
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _load_env_file(path):
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as file_handle:
+            for raw_line in file_handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip("\"").strip("'")
+                if key:
+                    os.environ.setdefault(key, value)
+    except OSError:
+        pass
+
+_load_env_file(os.path.join(BASE_DIR, ".env"))
+
 # 1. Configurar Django para poder usar los modelos/endpoints desde el script
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(BASE_DIR)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'EFT.settings')
 django.setup()
 
@@ -203,25 +228,112 @@ def obtener_memoria_ia():
     except Exception as e:
         return f"Error al obtener memoria: {e}"
 
-def procesar_prompt_con_ia(user_prompt):
-    model_path = "./llms/Qwen3.5-4B-Q8_0.gguf"
-    
+def _get_deepseek_config():
+    api_key = (
+        os.getenv("deepseek_API")
+    )
+    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    timeout_seconds = 60
+    return api_key, base_url, model, timeout_seconds
+
+def _get_usage_mode():
+    usage = os.getenv("usage") or os.getenv("USAGE")
+    if not usage:
+        return None
+    usage = usage.strip().lower()
+    if usage in ("local", "online"):
+        return usage
+    return None
+
+def _call_deepseek(messages, temperature=0.7):
+    api_key, base_url, model, timeout_seconds = _get_deepseek_config()
+    if not api_key:
+        raise RuntimeError("DeepSeek API key no configurada.")
+
+    url = f"{base_url.rstrip('/')}/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+def _init_llm_provider(model_path):
+    api_key, _, _, _ = _get_deepseek_config()
+    usage = _get_usage_mode()
+    if usage == "online":
+        if api_key:
+            return {"type": "deepseek"}
+        return {"type": "none", "error": "usage=online pero falta deepseek_API."}
+    if usage == "local":
+        if Llama is None:
+            return {
+                "type": "none",
+                "error": "usage=local pero llama_cpp no esta disponible.",
+            }
+        if not os.path.exists(model_path):
+            return {
+                "type": "none",
+                "error": f"No se encontro el modelo local en {model_path}.",
+            }
+        return {
+            "type": "local",
+            "llm": Llama(
+                model_path=model_path,
+                n_gpu_layers=-1,
+                seed=1337,
+                n_ctx=16384,
+                verbose=False,
+            ),
+        }
+    if api_key:
+        return {"type": "deepseek"}
+    if Llama is None:
+        return {
+            "type": "none",
+            "error": "No hay API key de DeepSeek y llama_cpp no esta disponible.",
+        }
     if not os.path.exists(model_path):
-        print(f"Error: No se encontró el modelo local en {model_path}.")
-        return
+        return {
+            "type": "none",
+            "error": f"No se encontro el modelo local en {model_path}.",
+        }
+    return {
+        "type": "local",
+        "llm": Llama(
+            model_path=model_path,
+            n_gpu_layers=-1,
+            seed=1337,
+            n_ctx=10240,
+            verbose=False,
+        ),
+    }
+
+def _get_backend_base_url():
+    return os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
+
+def procesar_prompt_con_ia(user_prompt):
+    model_path = "./llms/Qwen3.5-4B.Q4_K_M.gguf"
+
+    provider = _init_llm_provider(model_path)
+    if provider["type"] == "none":
+        return {"respuesta": provider["error"], "id": None}
 
     # Usar RAG (Generación Aumentada por Recuperación)
     contexto_rag = obtener_historial_transacciones()
     contexto_memoria = obtener_memoria_ia()
 
-    print("Cargando el modelo...")
-    llm = Llama(
-        model_path=model_path,
-        n_gpu_layers=-1,
-        seed=1337,
-        n_ctx=10240,
-        verbose=False # Desactivar verbosidad
-    )
+    if provider["type"] == "local":
+        print("Cargando el modelo local...")
 
     actual_date = datetime.now()
     
@@ -335,6 +447,10 @@ C) ACCIONES PERSONALIZADAS (NO CRUD)
 6. POST "/api/programaciones/{id}/ejecutar/"
     - Ejecuta una transacción programada y genera la transacción real
 
+7. GET "/api/programaciones/presupuesto-consolidado/"
+    - Devuelve el presupuesto consolidado por cuenta
+    - Query params: "cuentas" (repetible, IDs de cuentas). Ej: ?cuentas=1&cuentas=2
+
 Ejemplo de respuesta en un paso de tu ejecución:
 {{
   "acciones": [
@@ -362,15 +478,33 @@ REGLA DE CONSULTA DE DOCUMENTACION: No llames "/api/schema/" en cada solicitud. 
         {"role": "user", "content": user_prompt}
     ]
     
-    MAX_ITERATIONS = 5
+    MAX_ITERATIONS = 20
     for iteracion in range(MAX_ITERATIONS):
-        output = llm.create_chat_completion(
-            messages=messages,
-            temperature=0.1,  
-            repeat_penalty=1.1
-        )
-
-        respuesta_ia = output['choices'][0]['message']['content'].strip()
+        try:
+            if provider["type"] == "deepseek":
+                respuesta_ia = _call_deepseek(messages, temperature=0.1)
+            else:
+                output = provider["llm"].create_chat_completion(
+                    messages=messages,
+                    temperature=0.1,
+                    repeat_penalty=1.1,
+                )
+                respuesta_ia = output["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"Error al consultar el modelo: {e}")
+            interaccion_id = None
+            try:
+                interaccion = InteraccionIA.objects.create(
+                    usuario_prompt=user_prompt,
+                    contexto=contexto_rag,
+                    respuesta_ia="Error al consultar el modelo.",
+                    acciones_ejecutadas="",
+                    exitosa=False,
+                )
+                interaccion_id = interaccion.id
+            except Exception:
+                pass
+            return {"respuesta": "Error al consultar el modelo.", "id": interaccion_id}
         messages.append({"role": "assistant", "content": respuesta_ia})
 
         # Intentar interpretar la respuesta como una o más acciones JSON
@@ -422,7 +556,9 @@ REGLA DE CONSULTA DE DOCUMENTACION: No llames "/api/schema/" en cada solicitud. 
                     method = accion.get("method", "POST").upper()
                     payload = accion.get("data", {})
                     
-                    url = f"http://127.0.0.1:8000{endpoint}"
+                    base_url = _get_backend_base_url().rstrip("/")
+                    normalized_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                    url = f"{base_url}{normalized_endpoint}"
                     print(f"-> Llamando a {method} {endpoint}...")
                     
                     try:

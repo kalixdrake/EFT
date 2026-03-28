@@ -23,7 +23,8 @@ from apiTransacciones.serializers.programacion_serializer import (
     ProgramacionTransaccionSerializer,
     ProgramacionTransaccionListSerializer,
     ProgramacionTransaccionDetailSerializer,
-    PresupuestoConsolidadoPorCuentaSerializer
+    PresupuestoConsolidadoPorCuentaSerializer,
+    EjecutarProgramacionSerializer
 )
 
 from apiTransacciones.filters.programacion_filter import ProgramacionTransaccionFilter
@@ -157,94 +158,33 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
         Handles both one-time and recurring transactions.
         """
         programacion = self.get_object()
+        serializer = EjecutarProgramacionSerializer(data=request.data,context={'programacion': programacion})
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
 
-        # Validate state
-        if programacion.estado != 'PENDIENTE':
-            return Response(
-                {'error': f'No se puede ejecutar una transacción en estado {programacion.estado}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        if not programacion.activa:
-            return Response(
-                {'error': 'La transacción programada está desactivada'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        transaccion = result['transaccion']
+        programacion = result['programacion']
 
-        # Intenta obtener la fecha desde la request, si no, pone la fecha actual.
-        fecha_ejecucion = request.data.get('fecha_ejecucion')
-        if fecha_ejecucion:
-            try:
-                fecha_ejecucion = datetime.fromisoformat(fecha_ejecucion.replace('Z', '+00:00'))
-            except ValueError:
-                return Response(
-                    {'error': 'Formato de fecha inválido para fecha_ejecucion'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        else:
-            fecha_ejecucion = timezone.now()
-
-        # Create the actual transaction
-        try:
-            transaccion_data = {
-                'monto':programacion.monto,
-                'descripcion':programacion.descripcion,
-                'fecha_ejecucion':fecha_ejecucion,
-                'categoria':programacion.categoria.id,
-                'cuenta':programacion.cuenta.id,
-                'programacion':programacion.id
-            }
-            transaccion_serializer = TransaccionSerializer(data=transaccion_data)
-            transaccion_serializer.is_valid(raise_exception=True)
-            transaccion = transaccion_serializer.save()
-
-        except Exception as e:
-            return Response(
-                {'error': f'Error al crear la transacción: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Handle recurrence
-        if programacion.frecuencia == 'UNICA':
-            # One-time: mark as executed
-            programacion.estado = 'EJECUTADA'
-            programacion.activa = False
-            programacion.fecha_ultima_ejecucion = fecha_ejecucion
-            programacion.save()
-            message = 'Transacción ejecutada y programación finalizada.'
-        else:
-            # Recurring: calculate next occurrence
-            next_date = _calculate_next_date(programacion.fecha_programada, programacion.frecuencia)
-            # If next_date is beyond fecha_fin_repeticion, stop recurring
-            if programacion.fecha_fin_repeticion and next_date > programacion.fecha_fin_repeticion:
-                programacion.estado = 'EJECUTADA'  # or maybe keep as 'PENDIENTE' but deactivate?
-                programacion.activa = False
-                message = 'Transacción ejecutada. La recurrencia ha finalizado.'
-            else:
-                # Update for next occurrence
-                programacion.fecha_programada = next_date
-                programacion.fecha_ultima_ejecucion = fecha_ejecucion
-                # Keep estado as PENDIENTE and activa as True
-                message = 'Transacción ejecutada. Próxima ejecución programada para {}'.format(next_date)
-            programacion.save()
-
-        # Return success with transaction details and updated program info
+        # Construir URLs para la respuesta
         transaccion_url = request.build_absolute_uri(
-            reverse('transaccion-detail', args=[transaccion.id]))
+            reverse('transaccion-detail', args=[transaccion.id])
+        )
         programacion_url = request.build_absolute_uri(
             reverse('programacion-detail', args=[programacion.id])
         )
 
-        return Response({
-            'status': message,
-            'transaccion': {
-                'id': transaccion.id,
-                'url': transaccion_url,
-            },
-            'programacion': {
-                'id': programacion.id,
-                'url': programacion_url,
-            }
-        }, status=status.HTTP_200_OK)
+        return Response({'status': result['message'],
+                         'transaccion': {
+                             'id': transaccion.id,
+                             'url': transaccion_url,
+                             },
+                         'programacion': {
+                             'id': programacion.id,
+                             'url': programacion_url,
+                             }
+                        },
+                     status=status.HTTP_200_OK
+                    )
     
     @action(detail=False, methods=['get'], url_path='presupuesto-consolidado')
     def presupuesto_consolidado(self, request):
