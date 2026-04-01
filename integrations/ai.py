@@ -230,7 +230,7 @@ def obtener_memoria_ia():
 
 def _get_deepseek_config():
     api_key = (
-        os.getenv("deepseek_API")
+        os.getenv("DEEPSEEK_API")
     )
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
@@ -238,7 +238,7 @@ def _get_deepseek_config():
     return api_key, base_url, model, timeout_seconds
 
 def _get_usage_mode():
-    usage = os.getenv("usage") or os.getenv("USAGE")
+    usage = os.getenv("usage") or os.getenv("AI_USAGE")
     if not usage:
         return None
     usage = usage.strip().lower()
