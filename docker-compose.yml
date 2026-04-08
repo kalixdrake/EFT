@@ -1,0 +1,79 @@
+services:
+  # Servicio de PostgreSQL
+  db:
+    image: postgres:16-alpine
+    container_name: eft_postgres
+    restart: unless-stopped
+    env_file:
+      - .env.local  # O .env.local si mantienes ese nombre
+    environment:
+      # Los valores del .env sobrescribirán estos defaults
+      POSTGRES_DB: ${POSTGRES_DB:-eft_db}
+      POSTGRES_USER: ${POSTGRES_USER:-eft_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=es_ES.UTF-8 --lc-ctype=es_ES.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-eft_user} -d ${DATABASE_NAME:-eft_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eft_network
+
+  # Servicio de Django
+  web:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: eft_django
+    restart: unless-stopped
+    env_file:
+      - .env.local  # O .env.local si mantienes ese nombre
+    command: >
+      sh -c "
+        echo 'Waiting for database...';
+        until python -c 'import psycopg2; psycopg2.connect(host=\"db\", port=5432, user=\"${DATABASE_USERNAME:-eft_user}\", password=\"${DATABASE_PASSWORD:-changeme123}\", dbname=\"${DATABASE_NAME:-eft_db}\")' 2>/dev/null; do
+          echo 'Database unavailable - sleeping';
+          sleep 1;
+        done;
+        echo 'Database ready - starting Django';
+        python manage.py runserver 0.0.0.0:8000"
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      - DATABASE_ENGINE=${DATABASE_ENGINE:-postgresql}
+      - DATABASE_NAME=${DATABASE_NAME:-eft_db}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-eft_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-changeme123}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - USE_SQLITE=${USE_SQLITE:-False}
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - eft_network
+
+# Volúmenes persistentes
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+# Red personalizada
+networks:
+  eft_network:
+    name: eft_network
+    driver: bridge

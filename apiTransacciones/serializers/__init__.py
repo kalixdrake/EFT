@@ -5,3 +5,14 @@ from .programacion_serializer import (
     ProgramacionTransaccionListSerializer,
     ProgramacionTransaccionDetailSerializer
 )
+from .nomina_serializer import NominaSerializer, NominaCreateSerializer
+
+__all__ = [
+    'TransaccionSerializer',
+    'CategoriaSerializer',
+    'ProgramacionTransaccionSerializer',
+    'ProgramacionTransaccionListSerializer',
+    'ProgramacionTransaccionDetailSerializer',
+    'NominaSerializer',
+    'NominaCreateSerializer'
+]

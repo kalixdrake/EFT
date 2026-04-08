@@ -8,6 +8,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # Rutas de tus APIs (delegadas a cada app)
+    path('api/', include('apiUsuarios.urls')),
+    path('api/', include('apiInventario.urls')),
+    path('api/', include('apiPedidos.urls')),
     path('api/', include('apiBancos.urls')),
     path('api/', include('apiCuentas.urls')),
     path('api/', include('apiTransacciones.urls')),

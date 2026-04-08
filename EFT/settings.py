@@ -25,6 +25,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'apiUsuarios',  # Nueva app de usuarios
+    'apiInventario',  # Nueva app de inventario
+    'apiPedidos',  # Nueva app de pedidos
     'apiBancos',
     'apiCuentas',
     'apiTransacciones',
@@ -34,6 +37,9 @@ INSTALLED_APPS = [
     'django_extensions',
     'django_filters',
 ]
+
+# Configuración de autenticación personalizada
+AUTH_USER_MODEL = 'apiUsuarios.Usuario'
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
