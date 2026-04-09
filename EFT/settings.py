@@ -28,6 +28,8 @@ INSTALLED_APPS = [
     'apiUsuarios',  # Nueva app de usuarios
     'apiInventario',  # Nueva app de inventario
     'apiPedidos',  # Nueva app de pedidos
+    'apiImpuestos',
+    'apiUbicaciones',
     'apiBancos',
     'apiCuentas',
     'apiTransacciones',
@@ -44,6 +46,8 @@ AUTH_USER_MODEL = 'apiUsuarios.Usuario'
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'EXCEPTION_HANDLER': 'EFT.error_handlers.eft_exception_handler',
 }
 
 SPECTACULAR_SETTINGS = {

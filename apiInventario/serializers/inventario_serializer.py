@@ -5,13 +5,6 @@ from ..models import Producto, MovimientoInventario
 class ProductoSerializer(serializers.ModelSerializer):
     """Serializer para el modelo Producto"""
     
-    precio_con_impuesto = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        read_only=True,
-        source='precio_con_impuesto'
-    )
-    
     necesita_reabastecimiento = serializers.BooleanField(
         read_only=True,
         source='necesita_reabastecimiento'
@@ -28,7 +21,7 @@ class ProductoSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'id', 'nombre', 'sku', 'descripcion', 'precio_base',
-            'porcentaje_impuesto', 'precio_con_impuesto', 'stock_actual',
+            'stock_actual',
             'stock_minimo', 'necesita_reabastecimiento', 'valor_inventario',
             'activo', 'imagen', 'fecha_creacion', 'fecha_actualizacion'
         ]
@@ -38,17 +31,10 @@ class ProductoSerializer(serializers.ModelSerializer):
 class ProductoListSerializer(serializers.ModelSerializer):
     """Serializer ligero para listar productos"""
     
-    precio_con_impuesto = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        read_only=True,
-        source='precio_con_impuesto'
-    )
-    
     class Meta:
         model = Producto
         fields = [
-            'id', 'nombre', 'sku', 'precio_base', 'precio_con_impuesto',
+            'id', 'nombre', 'sku', 'precio_base',
             'stock_actual', 'activo'
         ]
 

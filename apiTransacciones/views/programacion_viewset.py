@@ -28,6 +28,8 @@ from apiTransacciones.serializers.programacion_serializer import (
 )
 
 from apiTransacciones.filters.programacion_filter import ProgramacionTransaccionFilter
+from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.rbac_contracts import Resources, Actions
 
 
 class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
@@ -40,6 +42,17 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
     serializer_class = ProgramacionTransaccionSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProgramacionTransaccionFilter
+    permission_classes = [RoleScopePermission]
+    rbac_resource = Resources.TRANSACCION
+    rbac_action_map = {
+        "pendientes": Actions.READ,
+        "activas": Actions.READ,
+        "activar": Actions.UPDATE,
+        "desactivar": Actions.UPDATE,
+        "cancelar": Actions.UPDATE,
+        "ejecutar": Actions.UPDATE,
+        "presupuesto_consolidado": Actions.READ,
+    }
     
     def get_serializer_class(self):
         """Return different serializers based on the action"""
@@ -48,6 +61,11 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
         elif self.action == 'retrieve':
             return ProgramacionTransaccionDetailSerializer
         return ProgramacionTransaccionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
     
     @action(detail=False, methods=['get'], url_path='pendientes')
     def pendientes(self, request):

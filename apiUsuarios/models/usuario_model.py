@@ -3,24 +3,8 @@ from django.db import models
 
 
 class Usuario(AbstractUser):
-    """
-    Modelo de usuario personalizado que extiende AbstractUser.
-    Define roles para el sistema empresarial ERP.
-    """
-    
-    class Rol(models.TextChoices):
-        CLIENTE = 'CLIENTE', 'Cliente'
-        SOCIO = 'SOCIO', 'Socio'
-        INTERNO = 'INTERNO', 'Interno'
-        ADMINISTRADOR = 'ADMINISTRADOR', 'Administrador'
-    
-    rol = models.CharField(
-        max_length=20,
-        choices=Rol.choices,
-        default=Rol.CLIENTE,
-        help_text="Rol del usuario en el sistema"
-    )
-    
+    """Identidad técnica del sistema (autenticación/autorización)."""
+
     telefono = models.CharField(
         max_length=20,
         blank=True,
@@ -52,24 +36,31 @@ class Usuario(AbstractUser):
         ordering = ['-fecha_registro']
     
     def __str__(self):
-        return f"{self.get_full_name() or self.username} ({self.get_rol_display()})"
+        return f"{self.get_full_name() or self.username}"
+
+    def tipo_entidad_principal(self):
+        if hasattr(self, 'empleado'):
+            return 'EMPLEADO'
+        if hasattr(self, 'socio'):
+            return 'SOCIO'
+        if hasattr(self, 'cliente'):
+            return 'CLIENTE'
+        return 'SIN_ENTIDAD'
     
     def es_cliente(self):
-        return self.rol == self.Rol.CLIENTE
+        return hasattr(self, 'cliente')
     
     def es_socio(self):
-        return self.rol == self.Rol.SOCIO
+        return hasattr(self, 'socio')
     
     def es_interno(self):
-        return self.rol == self.Rol.INTERNO
+        return hasattr(self, 'empleado')
     
     def es_administrador(self):
-        return self.rol == self.Rol.ADMINISTRADOR
+        return self.is_superuser or self.groups.filter(name='ADMIN_GENERAL').exists()
     
     def puede_gestionar_inventario(self):
-        """Verifica si el usuario puede gestionar inventario"""
-        return self.rol in [self.Rol.INTERNO, self.Rol.ADMINISTRADOR]
+        return self.is_superuser or self.groups.filter(name__in=['ADMIN_GENERAL', 'INVENTARIO', 'LOGISTICA']).exists()
     
     def puede_aprobar_pedidos(self):
-        """Verifica si el usuario puede aprobar pedidos de socios"""
-        return self.rol == self.Rol.ADMINISTRADOR
+        return self.is_superuser or self.groups.filter(name__in=['ADMIN_GENERAL', 'LOGISTICA']).exists()

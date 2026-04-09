@@ -1,13 +1,17 @@
 from .usuario_serializer import (
     UsuarioSerializer,
     UsuarioCreateSerializer,
-    UsuarioListSerializer,
-    PerfilSocioSerializer
+    UsuarioListSerializer
 )
+from .cliente_serializer import ClienteSerializer
+from .socio_serializer import SocioSerializer
+from .empleado_serializer import EmpleadoSerializer
 
 __all__ = [
     'UsuarioSerializer',
     'UsuarioCreateSerializer',
     'UsuarioListSerializer',
-    'PerfilSocioSerializer'
+    'ClienteSerializer',
+    'SocioSerializer',
+    'EmpleadoSerializer',
 ]

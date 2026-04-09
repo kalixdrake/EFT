@@ -4,10 +4,22 @@ from .inventario_serializer import (
     MovimientoInventarioSerializer,
     MovimientoInventarioCreateSerializer
 )
+from .activos_serializer import (
+    CategoriaActivoSerializer,
+    ActivoFijoSerializer,
+    DepreciacionActivoSerializer,
+    MantenimientoActivoSerializer,
+    MovimientoActivoSerializer,
+)
 
 __all__ = [
     'ProductoSerializer',
     'ProductoListSerializer',
     'MovimientoInventarioSerializer',
-    'MovimientoInventarioCreateSerializer'
+    'MovimientoInventarioCreateSerializer',
+    'CategoriaActivoSerializer',
+    'ActivoFijoSerializer',
+    'DepreciacionActivoSerializer',
+    'MantenimientoActivoSerializer',
+    'MovimientoActivoSerializer',
 ]

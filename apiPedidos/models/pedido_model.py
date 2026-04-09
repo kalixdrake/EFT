@@ -1,12 +1,14 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from decimal import Decimal
 from apiUsuarios.models import Usuario
+from apiUbicaciones.models import Ubicacion
 
 
 class Pedido(models.Model):
     """
     Modelo para representar pedidos/órdenes en el sistema.
-    Soporta diferentes tipos según el rol del usuario.
+    Soporta diferentes tipos según entidad/permiso del usuario.
     """
     
     class TipoPedido(models.TextChoices):
@@ -41,13 +43,22 @@ class Pedido(models.Model):
         related_name='pedidos_como_cliente',
         help_text="Cliente o proveedor asociado al pedido"
     )
+
+    ubicacion_entrega = models.ForeignKey(
+        Ubicacion,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="pedidos_entrega",
+        help_text="Ubicación de entrega del pedido",
+    )
     
     interno_asignado = models.ForeignKey(
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        limit_choices_to={'rol__in': ['INTERNO', 'ADMINISTRADOR']},
+        limit_choices_to=models.Q(empleado__isnull=False),
         related_name='pedidos_asignados',
         help_text="Usuario interno/admin asignado al pedido"
     )
@@ -123,8 +134,12 @@ class Pedido(models.Model):
         subtotal = self.detalles.aggregate(
             total=Sum(F('cantidad') * F('precio_unitario'))
         )['total'] or 0
+        impuestos = self.detalles.aggregate(
+            total=Sum('monto_impuesto')
+        )['total'] or 0
         
         # Aplicar descuento
-        descuento = subtotal * (self.porcentaje_descuento / 100)
-        self.total = subtotal - descuento
+        descuento_pct = Decimal(str(self.porcentaje_descuento or 0))
+        descuento = subtotal * (descuento_pct / Decimal("100"))
+        self.total = (subtotal - descuento) + impuestos
         return self.total

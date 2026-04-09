@@ -2,11 +2,13 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
 from django.utils import timezone
+from django.contrib.auth.models import Group
 from datetime import datetime
 from decimal import Decimal
 from apiCuentas.models.cuenta_model import Cuenta
 from apiTransacciones.models.transaccion_model import Transaccion
 from apiTransacciones.models.categorias_model import Categoria
+from apiUsuarios.models import Empleado, Usuario
 
 class TransaccionViewSetTest(APITestCase):
     fixtures = [
@@ -18,6 +20,14 @@ class TransaccionViewSetTest(APITestCase):
     def setUp(self):
         self.list_url = reverse('transaccion-list')
         self.transferir_url = reverse('transaccion-transferir')
+        self.user = Usuario.objects.create_user(
+            username="trans_test_admin",
+            password="pass1234",
+        )
+        Empleado.objects.create(usuario=self.user, numero_empleado=f"EMP-{self.user.id}", salario_base=0)
+        admin_group, _ = Group.objects.get_or_create(name="ADMIN_GENERAL")
+        self.user.groups.add(admin_group)
+        self.client.force_authenticate(user=self.user)
 
         # Acorde a las fixtures de cuentas, account 1 tiene saldo 100,000.00
         self.cuenta_origen = Cuenta.objects.get(id=1) 

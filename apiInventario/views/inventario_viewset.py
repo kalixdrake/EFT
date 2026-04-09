@@ -14,6 +14,8 @@ from ..serializers import (
     MovimientoInventarioCreateSerializer
 )
 from apiUsuarios.permissions import IsAdministradorOrInterno
+from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.rbac_contracts import Resources, Actions
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
@@ -26,8 +28,15 @@ class ProductoViewSet(viewsets.ModelViewSet):
     """
     
     queryset = Producto.objects.all()
+    permission_classes = [RoleScopePermission]
+    rbac_resource = Resources.INVENTARIO
+    rbac_action_map = {
+        'bajo_stock': Actions.READ,
+        'valor_total_inventario': Actions.READ,
+        'ajustar_stock': Actions.UPDATE,
+    }
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['activo', 'porcentaje_impuesto']
+    filterset_fields = ['activo']
     search_fields = ['nombre', 'sku', 'descripcion']
     ordering_fields = ['nombre', 'precio_base', 'stock_actual', 'fecha_creacion']
     ordering = ['nombre']
@@ -40,11 +49,16 @@ class ProductoViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             # Solo administradores e internos pueden modificar productos
-            permission_classes = [IsAdministradorOrInterno]
+            permission_classes = [RoleScopePermission, IsAdministradorOrInterno]
         else:
             # Lectura permitida para todos los autenticados
-            permission_classes = [IsAuthenticated]
+            permission_classes = [RoleScopePermission]
         return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def bajo_stock(self, request):
@@ -114,6 +128,9 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
     """
     
     queryset = MovimientoInventario.objects.select_related('producto', 'usuario').all()
+    permission_classes = [RoleScopePermission]
+    rbac_resource = Resources.INVENTARIO
+    rbac_action_map = {'por_producto': Actions.READ}
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['tipo', 'producto', 'usuario']
     search_fields = ['producto__nombre', 'producto__sku', 'motivo', 'referencia']
@@ -131,11 +148,16 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'create':
             # Solo administradores e internos pueden crear movimientos
-            permission_classes = [IsAdministradorOrInterno]
+            permission_classes = [RoleScopePermission, IsAdministradorOrInterno]
         else:
             # Lectura permitida para todos los autenticados
-            permission_classes = [IsAuthenticated]
+            permission_classes = [RoleScopePermission]
         return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def por_producto(self, request):

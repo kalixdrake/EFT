@@ -2,6 +2,8 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from apiInventario.models import Producto
 from .pedido_model import Pedido
+from apiImpuestos.models import SnapshotImpuestoTransaccional
+from apiImpuestos.services import calcular_impuestos_y_snapshots
 
 
 class DetallePedido(models.Model):
@@ -36,12 +38,12 @@ class DetallePedido(models.Model):
         help_text="Precio unitario al momento del pedido (histórico)"
     )
     
-    porcentaje_impuesto = models.DecimalField(
-        max_digits=5,
+    monto_impuesto = models.DecimalField(
+        max_digits=12,
         decimal_places=2,
         default=0.00,
         validators=[MinValueValidator(0)],
-        help_text="Porcentaje de impuesto al momento del pedido"
+        help_text="Monto de impuesto del detalle al momento del pedido"
     )
     
     notas = models.TextField(
@@ -64,13 +66,9 @@ class DetallePedido(models.Model):
         """Calcula el subtotal sin impuestos"""
         return self.cantidad * self.precio_unitario
     
-    def monto_impuesto(self):
-        """Calcula el monto de impuestos"""
-        return self.subtotal() * (self.porcentaje_impuesto / 100)
-    
     def total(self):
         """Calcula el total incluyendo impuestos"""
-        return self.subtotal() + self.monto_impuesto()
+        return self.subtotal() + self.monto_impuesto
     
     def save(self, *args, **kwargs):
         """
@@ -80,10 +78,21 @@ class DetallePedido(models.Model):
         if not self.precio_unitario:
             self.precio_unitario = self.producto.precio_base
         
-        if not self.porcentaje_impuesto:
-            self.porcentaje_impuesto = self.producto.porcentaje_impuesto
-        
         super().save(*args, **kwargs)
+
+        SnapshotImpuestoTransaccional.objects.filter(
+            origen="PEDIDO_DETALLE",
+            origen_id=self.id,
+        ).delete()
+        self.monto_impuesto = calcular_impuestos_y_snapshots(
+            origen="PEDIDO_DETALLE",
+            origen_id=self.id,
+            tipo_sujeto="PRODUCTO",
+            subtotal=self.subtotal(),
+            descuento_pct=self.pedido.porcentaje_descuento,
+            producto=self.producto,
+        )
+        super().save(update_fields=["monto_impuesto"])
         
         # Recalcular el total del pedido
         self.pedido.calcular_total()

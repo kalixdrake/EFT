@@ -21,7 +21,7 @@ class Nomina(models.Model):
     empleado = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,
-        limit_choices_to={'rol__in': ['INTERNO', 'ADMINISTRADOR']},
+        limit_choices_to=models.Q(empleado__isnull=False),
         related_name='nominas',
         help_text="Empleado al que pertenece esta nómina"
     )
@@ -92,7 +92,7 @@ class Nomina(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        limit_choices_to={'rol': 'ADMINISTRADOR'},
+        limit_choices_to=models.Q(is_superuser=True) | models.Q(groups__name='ADMIN_GENERAL'),
         related_name='nominas_aprobadas',
         help_text="Administrador que aprobó el pago"
     )

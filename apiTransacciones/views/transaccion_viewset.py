@@ -6,6 +6,8 @@ from apiTransacciones.models.transaccion_model import Transaccion
 from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
 from apiTransacciones.serializers.transferencia_serializer import TransferenciaSerializer
 from apiTransacciones.filters.transaccion_filter import TransaccionFilter
+from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.rbac_contracts import Resources, Actions
 
 
 class TransaccionViewSet(viewsets.ModelViewSet):
@@ -13,6 +15,14 @@ class TransaccionViewSet(viewsets.ModelViewSet):
     serializer_class = TransaccionSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = TransaccionFilter
+    permission_classes = [RoleScopePermission]
+    rbac_resource = Resources.TRANSACCION
+    rbac_action_map = {"transferir": Actions.CREATE}
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
 
     @action(detail=False, methods=['post'], url_path='transferir')
     def transferir(self, request):

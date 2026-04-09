@@ -6,7 +6,9 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 
-from apiUsuarios.models import Usuario, PerfilSocio
+from django.contrib.auth.models import Group
+
+from apiUsuarios.models import Usuario, Cliente, Socio, Empleado
 from apiInventario.models import Producto
 from apiTransacciones.models import Categoria
 from apiBancos.models import Banco
@@ -39,9 +41,8 @@ class Command(BaseCommand):
         self.mostrar_resumen()
 
     def crear_usuarios(self):
-        """Crear usuarios de ejemplo de cada rol"""
-        
-        # Admin ya existe, solo crear los demás
+        """Crear usuarios de ejemplo con entidad explícita"""
+
         usuarios_crear = [
             {
                 'username': 'cliente1',
@@ -49,8 +50,9 @@ class Command(BaseCommand):
                 'password': 'cliente123',
                 'first_name': 'Juan',
                 'last_name': 'Pérez',
-                'rol': 'CLIENTE',
-                'telefono': '555-0001'
+                'telefono': '555-0001',
+                'tipo_entidad': 'CLIENTE',
+                'grupo': 'USUARIO_EXTERNO',
             },
             {
                 'username': 'socio1',
@@ -58,8 +60,9 @@ class Command(BaseCommand):
                 'password': 'socio123',
                 'first_name': 'María',
                 'last_name': 'González',
-                'rol': 'SOCIO',
-                'telefono': '555-0002'
+                'telefono': '555-0002',
+                'tipo_entidad': 'SOCIO',
+                'grupo': 'USUARIO_EXTERNO',
             },
             {
                 'username': 'interno1',
@@ -67,32 +70,44 @@ class Command(BaseCommand):
                 'password': 'interno123',
                 'first_name': 'Carlos',
                 'last_name': 'Ramírez',
-                'rol': 'INTERNO',
-                'telefono': '555-0003'
+                'telefono': '555-0003',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': 'ADMIN_GENERAL',
             },
         ]
 
         for user_data in usuarios_crear:
             username = user_data.pop('username')
             password = user_data.pop('password')
-            
+            tipo_entidad = user_data.pop('tipo_entidad')
+            grupo = user_data.pop('grupo')
+
             if not Usuario.objects.filter(username=username).exists():
                 usuario = Usuario.objects.create_user(
                     username=username,
                     password=password,
                     **user_data
                 )
-                self.stdout.write(f'  ✓ Usuario creado: {username} ({usuario.get_rol_display()})')
+                group_obj, _ = Group.objects.get_or_create(name=grupo)
+                usuario.groups.add(group_obj)
+                self.stdout.write(f'  ✓ Usuario creado: {username} ({tipo_entidad})')
 
-                # Crear perfil de socio si aplica
-                if usuario.rol == 'SOCIO':
-                    PerfilSocio.objects.create(
+                if tipo_entidad == 'SOCIO':
+                    Socio.objects.get_or_create(
                         usuario=usuario,
-                        porcentaje_anticipo=Decimal('30.00'),
-                        limite_credito=Decimal('50000.00'),
-                        descuento_especial=Decimal('10.00')
+                        defaults={
+                            'porcentaje_anticipo': Decimal('30.00'),
+                            'limite_credito': Decimal('50000.00'),
+                            'descuento_especial': Decimal('10.00'),
+                        }
                     )
-                    self.stdout.write(f'    → Perfil de socio creado para {username}')
+                elif tipo_entidad == 'CLIENTE':
+                    Cliente.objects.get_or_create(usuario=usuario)
+                elif tipo_entidad == 'EMPLEADO':
+                    Empleado.objects.get_or_create(
+                        usuario=usuario,
+                        defaults={'numero_empleado': f'EMP-{usuario.id}', 'salario_base': Decimal('0.00')}
+                    )
 
     def crear_categorias(self):
         """Crear categorías empresariales"""
@@ -147,7 +162,6 @@ class Command(BaseCommand):
                 'sku': 'LAP-DELL-001',
                 'descripcion': 'Laptop Dell Inspiron 15, 8GB RAM, 256GB SSD',
                 'precio_base': Decimal('15000.00'),
-                'porcentaje_impuesto': Decimal('16.00'),
                 'stock_actual': 10,
                 'stock_minimo': 3
             },
@@ -156,7 +170,6 @@ class Command(BaseCommand):
                 'sku': 'MOU-LOG-001',
                 'descripcion': 'Mouse inalámbrico Logitech MX Master 3',
                 'precio_base': Decimal('1200.00'),
-                'porcentaje_impuesto': Decimal('16.00'),
                 'stock_actual': 25,
                 'stock_minimo': 5
             },
@@ -165,7 +178,6 @@ class Command(BaseCommand):
                 'sku': 'TEC-RGB-001',
                 'descripcion': 'Teclado mecánico RGB con switches azules',
                 'precio_base': Decimal('2500.00'),
-                'porcentaje_impuesto': Decimal('16.00'),
                 'stock_actual': 15,
                 'stock_minimo': 5
             },
@@ -174,7 +186,6 @@ class Command(BaseCommand):
                 'sku': 'MON-LG-001',
                 'descripcion': 'Monitor LG 27 pulgadas, resolución 4K UHD',
                 'precio_base': Decimal('8500.00'),
-                'porcentaje_impuesto': Decimal('16.00'),
                 'stock_actual': 8,
                 'stock_minimo': 2
             },
@@ -183,7 +194,6 @@ class Command(BaseCommand):
                 'sku': 'CAM-LOG-001',
                 'descripcion': 'Webcam Logitech C920 Full HD 1080p',
                 'precio_base': Decimal('1800.00'),
-                'porcentaje_impuesto': Decimal('16.00'),
                 'stock_actual': 20,
                 'stock_minimo': 5
             },
@@ -195,8 +205,7 @@ class Command(BaseCommand):
                 defaults=prod_data
             )
             if created:
-                precio_final = producto.precio_con_impuesto()
-                self.stdout.write(f'  ✓ Producto: {producto.nombre} | Precio: ${precio_final:.2f} | Stock: {producto.stock_actual}')
+                self.stdout.write(f'  ✓ Producto: {producto.nombre} | Precio base: ${producto.precio_base:.2f} | Stock: {producto.stock_actual}')
 
     def mostrar_resumen(self):
         """Mostrar resumen de datos cargados"""

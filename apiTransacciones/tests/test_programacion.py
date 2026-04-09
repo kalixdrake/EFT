@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.urls import reverse
 from django.utils import timezone
+from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -10,6 +11,7 @@ from apiCuentas.models.cuenta_model import Cuenta
 from apiTransacciones.models.programacion_model import ProgramacionTransaccion
 from apiTransacciones.models.transaccion_model import Transaccion
 from apiTransacciones.models.categorias_model import Categoria
+from apiUsuarios.models import Empleado, Usuario
 
 
 class ProgramacionTransaccionViewSetTest(APITestCase):
@@ -24,6 +26,14 @@ class ProgramacionTransaccionViewSetTest(APITestCase):
         self.list_url = reverse('programacion-list')
         self.detail_url = lambda pk: reverse('programacion-detail', args=[pk])
         self.ejecutar_url = lambda pk: reverse('programacion-ejecutar', args=[pk])
+        self.user = Usuario.objects.create_user(
+            username="programacion_test_admin",
+            password="pass1234",
+        )
+        Empleado.objects.create(usuario=self.user, numero_empleado=f"EMP-{self.user.id}", salario_base=0)
+        admin_group, _ = Group.objects.get_or_create(name="ADMIN_GENERAL")
+        self.user.groups.add(admin_group)
+        self.client.force_authenticate(user=self.user)
 
         # Accounts from fixtures (id 1 and 2 have balances 100,000 and 1,668,000)
         self.cuenta_origen = Cuenta.objects.get(id=2)

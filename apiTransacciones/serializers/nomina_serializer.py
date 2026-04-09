@@ -33,9 +33,8 @@ class NominaCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate_empleado(self, value):
-        """Validar que el empleado tenga rol adecuado"""
-        if value.rol not in ['INTERNO', 'ADMINISTRADOR']:
-            raise serializers.ValidationError("Solo se pueden crear nóminas para empleados internos o administradores")
+        if not hasattr(value, 'empleado'):
+            raise serializers.ValidationError("Solo se pueden crear nóminas para usuarios con entidad Empleado.")
         return value
     
     def validate(self, attrs):

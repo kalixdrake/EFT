@@ -1,5 +1,5 @@
 """
-Funciones auxiliares para generar prompts contextualizados por rol de usuario
+Funciones auxiliares para generar prompts contextualizados por tipo de entidad.
 """
 from datetime import datetime
 
@@ -13,8 +13,7 @@ def obtener_contexto_productos_inventario():
         contexto = "Productos disponibles:\n"
         
         for p in productos:
-            precio_con_impuesto = p.precio_con_impuesto()
-            contexto += f"- {p.nombre} (SKU: {p.sku}) | Precio: ${precio_con_impuesto:.2f} | Stock: {p.stock_actual}\n"
+            contexto += f"- {p.nombre} (SKU: {p.sku}) | Precio base: ${p.precio_base:.2f} | Stock: {p.stock_actual}\n"
         
         return contexto if productos.exists() else "No hay productos disponibles actualmente."
     except Exception as e:
@@ -32,9 +31,8 @@ def obtener_contexto_pedidos_socio(usuario):
         for p in pedidos:
             contexto += f"- Pedido #{p.id} | Estado: {p.get_estado_display()} | Total: ${p.total} | Saldo: ${p.saldo_pendiente()}\n"
         
-        # Agregar información del perfil de socio si existe
-        if hasattr(usuario, 'perfil_socio'):
-            perfil = usuario.perfil_socio
+        if hasattr(usuario, 'socio'):
+            perfil = usuario.socio
             contexto += f"\nPerfil de Socio:\n"
             contexto += f"- Crédito disponible: ${perfil.credito_disponible()}\n"
             contexto += f"- Saldo pendiente: ${perfil.saldo_pendiente}\n"
@@ -100,8 +98,7 @@ Responde de manera profesional y precisa."""
 
 def generar_system_prompt_por_rol(usuario, contexto_rag, contexto_memoria):
     """
-    Genera el system prompt adecuado según el rol del usuario.
-    Aplica limitaciones y contexto específico por rol.
+    Genera el system prompt adecuado según la entidad del usuario.
     """
     fecha_actual = datetime.now().strftime('%Y-%m-%d')
     
@@ -109,19 +106,18 @@ def generar_system_prompt_por_rol(usuario, contexto_rag, contexto_memoria):
     if not usuario:
         return generar_system_prompt_cliente(fecha_actual)
     
-    # Obtener rol del usuario
-    rol = getattr(usuario, 'rol', 'CLIENTE')
+    tipo_entidad = getattr(usuario, 'tipo_entidad_principal', lambda: "SIN_ENTIDAD")()
     
     # CLIENTE: Limitado a información de productos, precios y formas de pago
-    if rol == 'CLIENTE':
+    if tipo_entidad == 'CLIENTE':
         return generar_system_prompt_cliente(fecha_actual)
     
     # SOCIO: Información sobre sus reservas, saldos y productos
-    elif rol == 'SOCIO':
+    elif tipo_entidad == 'SOCIO':
         return generar_system_prompt_socio(usuario, fecha_actual)
     
     # INTERNO/ADMINISTRADOR: Acceso completo (prompt original)
-    elif rol in ['INTERNO', 'ADMINISTRADOR']:
+    elif tipo_entidad == 'EMPLEADO':
         # Retornar el prompt completo original con todas las capacidades
         return f"""Eres un agente financiero autónomo y experto. Ayudas a organizar el presupuesto del usuario y tienes la capacidad de ejecutar múltiples pasos de manera iterativa.
 La fecha y mes actual es {fecha_actual}.
@@ -148,5 +144,5 @@ ENDPOINTS DISPONIBLES incluyen:
 INSTRUCCIÓN ESTRICTA: Cuando debas ejecutar acciones o buscar IDs, tu respuesta debe ser SÓLO Y EXCLUSIVAMENTE un único objeto JSON que contenga la lista "acciones". NO incluyas explicaciones en texto, saludos ni advertencias. Solo el JSON.
 """
     
-    # Fallback para rol desconocido
+    # Fallback para usuarios sin entidad
     return generar_system_prompt_cliente(fecha_actual)

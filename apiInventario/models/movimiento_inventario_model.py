@@ -45,7 +45,6 @@ class MovimientoInventario(models.Model):
     usuario = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,
-        limit_choices_to={'rol__in': ['INTERNO', 'ADMINISTRADOR']},
         related_name='movimientos_inventario',
         help_text="Usuario interno/administrador que procesó el movimiento"
     )

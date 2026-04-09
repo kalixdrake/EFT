@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from ..models import Pedido, DetallePedido
 from apiInventario.models import Producto
+from apiUsuarios.models import Cliente, Socio
 
 
 class DetallePedidoSerializer(serializers.ModelSerializer):
@@ -15,7 +16,7 @@ class DetallePedidoSerializer(serializers.ModelSerializer):
         model = DetallePedido
         fields = [
             'id', 'producto', 'producto_nombre', 'cantidad',
-            'precio_unitario', 'porcentaje_impuesto', 'subtotal',
+            'precio_unitario', 'subtotal',
             'monto_impuesto', 'total', 'notas'
         ]
         read_only_fields = ['id', 'subtotal', 'monto_impuesto', 'total']
@@ -44,12 +45,14 @@ class PedidoSerializer(serializers.ModelSerializer):
     interno_nombre = serializers.CharField(source='interno_asignado.get_full_name', read_only=True, allow_null=True)
     saldo_pendiente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='saldo_pendiente')
     esta_pagado = serializers.BooleanField(read_only=True, source='esta_pagado')
+    ubicacion_entrega_nombre = serializers.CharField(source='ubicacion_entrega.nombre', read_only=True, allow_null=True)
     
     class Meta:
         model = Pedido
         fields = [
             'id', 'tipo', 'estado', 'cliente', 'cliente_nombre',
             'interno_asignado', 'interno_nombre', 'total', 'monto_pagado',
+            'ubicacion_entrega', 'ubicacion_entrega_nombre',
             'saldo_pendiente', 'esta_pagado', 'porcentaje_descuento',
             'notas', 'fecha_creacion', 'fecha_actualizacion',
             'fecha_completado', 'detalles'
@@ -64,26 +67,27 @@ class PedidoCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Pedido
-        fields = ['tipo', 'cliente', 'detalles', 'notas', 'porcentaje_descuento']
+        fields = ['tipo', 'cliente', 'ubicacion_entrega', 'detalles', 'notas', 'porcentaje_descuento']
     
     def validate_tipo(self, value):
-        """Validar que el tipo de pedido sea apropiado para el rol del usuario"""
+        """Validar que el tipo de pedido sea apropiado para la entidad del usuario"""
         request = self.context.get('request')
         user = request.user if request else None
         
         if not user:
             raise serializers.ValidationError("Usuario no autenticado")
         
-        # Clientes solo pueden crear VENTA_CLIENTE
-        if user.es_cliente() and value != 'VENTA_CLIENTE':
+        is_cliente = Cliente.objects.filter(usuario=user).exists()
+        is_socio = Socio.objects.filter(usuario=user).exists()
+        is_admin = user.es_administrador()
+
+        if is_cliente and value != 'VENTA_CLIENTE':
             raise serializers.ValidationError("Los clientes solo pueden crear pedidos de venta")
-        
-        # Socios solo pueden crear APARTADO_SOCIO
-        if user.es_socio() and value != 'APARTADO_SOCIO':
+
+        if is_socio and value != 'APARTADO_SOCIO':
             raise serializers.ValidationError("Los socios solo pueden crear apartados")
-        
-        # Solo admins pueden crear RE_STOCK
-        if value == 'RE_STOCK' and not user.es_administrador():
+
+        if value == 'RE_STOCK' and not is_admin:
             raise serializers.ValidationError("Solo administradores pueden crear pedidos de reabastecimiento")
         
         return value
@@ -93,7 +97,7 @@ class PedidoCreateSerializer(serializers.ModelSerializer):
         detalles_data = validated_data.pop('detalles')
         request = self.context.get('request')
         
-        # Determinar estado inicial según tipo y rol
+        # Determinar estado inicial según tipo de pedido
         tipo = validated_data['tipo']
         if tipo == 'APARTADO_SOCIO':
             validated_data['estado'] = 'PENDIENTE_APROBACION'
@@ -108,6 +112,7 @@ class PedidoCreateSerializer(serializers.ModelSerializer):
         
         # Crear detalles
         for detalle_data in detalles_data:
+            detalle_data.pop("monto_impuesto", None)
             DetallePedido.objects.create(pedido=pedido, **detalle_data)
         
         # Recalcular total

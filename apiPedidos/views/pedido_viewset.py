@@ -15,23 +15,26 @@ from ..serializers import (
     DetallePedidoSerializer
 )
 from apiUsuarios.permissions import IsAdministrador, IsAdministradorOrInterno
+from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.rbac_contracts import Resources, Actions
 from apiInventario.models import MovimientoInventario
 
 
 class PedidoViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestionar pedidos.
-    
-    Lógica por roles:
-    - CLIENTE: Puede crear VENTA_CLIENTE y ver sus propios pedidos
-    - SOCIO: Puede crear APARTADO_SOCIO (con estado PENDIENTE_APROBACION) y ver sus propios
-    - INTERNO: Puede actualizar estados, ver todos, asignar pedidos
-    - ADMINISTRADOR: Puede crear RE_STOCK, aprobar APARTADOS, acceso total
-    """
+    """ViewSet para gestionar pedidos con control RBAC/scopes."""
     
     queryset = Pedido.objects.select_related('cliente', 'interno_asignado').prefetch_related('detalles__producto').all()
+    permission_classes = [RoleScopePermission]
+    rbac_resource = Resources.PEDIDO
+    rbac_action_map = {
+        'aprobar': Actions.APPROVE,
+        'asignar_interno': Actions.ASSIGN,
+        'mis_pedidos': Actions.READ,
+        'registrar_pago': Actions.UPDATE,
+        'cambiar_estado': Actions.UPDATE,
+    }
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['tipo', 'estado', 'cliente']
+    filterset_fields = ['tipo', 'estado', 'cliente', 'ubicacion_entrega', 'ubicacion_entrega__ciudad', 'ubicacion_entrega__ciudad__departamento', 'ubicacion_entrega__ciudad__departamento__pais']
     search_fields = ['cliente__username', 'cliente__first_name', 'cliente__last_name', 'notas']
     ordering_fields = ['fecha_creacion', 'total']
     ordering = ['-fecha_creacion']
@@ -44,21 +47,16 @@ class PedidoViewSet(viewsets.ModelViewSet):
         return PedidoSerializer
     
     def get_permissions(self):
-        # Todos los usuarios autenticados pueden crear pedidos (con restricciones por tipo)
-        # Las validaciones específicas están en los serializers
-        return [IsAuthenticated()]
+        if self.action == 'aprobar':
+            return [RoleScopePermission(), IsAdministrador()]
+        if self.action in ['cambiar_estado', 'registrar_pago', 'asignar_interno']:
+            return [RoleScopePermission(), IsAdministradorOrInterno()]
+        return [RoleScopePermission()]
     
     def get_queryset(self):
-        """Filtrar queryset según el rol del usuario"""
         queryset = super().get_queryset()
-        user = self.request.user
-        
-        # Administradores e internos ven todos
-        if user.es_administrador() or user.es_interno():
-            return queryset
-        
-        # Clientes y socios solo ven sus propios pedidos
-        return queryset.filter(cliente=user)
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAdministrador])
     def aprobar(self, request, pk=None):
@@ -146,10 +144,11 @@ class PedidoViewSet(viewsets.ModelViewSet):
             pedido.save()
             
             # Actualizar saldo del socio si aplica
-            if pedido.tipo == 'APARTADO_SOCIO' and hasattr(pedido.cliente, 'perfil_socio'):
-                perfil = pedido.cliente.perfil_socio
-                perfil.saldo_pendiente = max(0, perfil.saldo_pendiente - monto)
-                perfil.save()
+            if pedido.tipo == 'APARTADO_SOCIO':
+                socio = pedido.cliente.socio if hasattr(pedido.cliente, 'socio') else None
+                if socio:
+                    socio.saldo_pendiente = max(0, socio.saldo_pendiente - monto)
+                    socio.save()
             
             serializer = self.get_serializer(pedido)
             return Response(serializer.data)
@@ -174,7 +173,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
         
         from apiUsuarios.models import Usuario
         try:
-            interno = Usuario.objects.get(id=interno_id, rol__in=['INTERNO', 'ADMINISTRADOR'])
+            interno = Usuario.objects.get(
+                models.Q(id=interno_id) & models.Q(empleado__isnull=False)
+            )
             pedido.interno_asignado = interno
             pedido.save()
             

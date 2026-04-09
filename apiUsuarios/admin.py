@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Usuario, PerfilSocio
+from .models import Usuario, Cliente, Socio, Empleado
 
 
 @admin.register(Usuario)
@@ -9,42 +9,38 @@ class UsuarioAdmin(BaseUserAdmin):
     
     fieldsets = BaseUserAdmin.fieldsets + (
         ('Información Empresarial', {
-            'fields': ('rol', 'telefono', 'direccion', 'activo_comercialmente')
+            'fields': ('telefono', 'direccion', 'activo_comercialmente')
         }),
     )
     
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         ('Información Empresarial', {
-            'fields': ('rol', 'telefono', 'direccion', 'activo_comercialmente')
+            'fields': ('telefono', 'direccion', 'activo_comercialmente')
         }),
     )
     
-    list_display = ['username', 'email', 'first_name', 'last_name', 'rol', 'activo_comercialmente', 'is_staff']
-    list_filter = ['rol', 'activo_comercialmente', 'is_staff', 'is_active']
+    list_display = ['username', 'email', 'first_name', 'last_name', 'activo_comercialmente', 'is_staff']
+    list_filter = ['activo_comercialmente', 'is_staff', 'is_active']
     search_fields = ['username', 'email', 'first_name', 'last_name', 'telefono']
 
 
-@admin.register(PerfilSocio)
-class PerfilSocioAdmin(admin.ModelAdmin):
-    """Administración para perfiles de socios"""
-    
-    list_display = ['usuario', 'porcentaje_anticipo', 'limite_credito', 'saldo_pendiente', 'activo', 'fecha_acuerdo']
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'nombre_comercial', 'rif', 'estado', 'fecha_afiliacion']
+    list_filter = ['estado', 'fecha_afiliacion']
+    search_fields = ['usuario__username', 'usuario__email', 'nombre_comercial', 'rif']
+
+
+@admin.register(Socio)
+class SocioAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'limite_credito', 'saldo_pendiente', 'activo', 'fecha_acuerdo']
     list_filter = ['activo', 'fecha_acuerdo']
-    search_fields = ['usuario__username', 'usuario__email', 'usuario__first_name', 'usuario__last_name']
-    readonly_fields = ['fecha_acuerdo', 'credito_disponible']
-    
-    fieldsets = (
-        ('Usuario', {
-            'fields': ('usuario',)
-        }),
-        ('Acuerdos Comerciales', {
-            'fields': ('porcentaje_anticipo', 'limite_credito', 'saldo_pendiente', 'descuento_especial')
-        }),
-        ('Información Adicional', {
-            'fields': ('notas_internas', 'activo', 'fecha_acuerdo')
-        }),
-    )
-    
-    def credito_disponible(self, obj):
-        return obj.credito_disponible()
-    credito_disponible.short_description = 'Crédito Disponible'
+    search_fields = ['usuario__username', 'usuario__email']
+    readonly_fields = ['fecha_acuerdo']
+
+
+@admin.register(Empleado)
+class EmpleadoAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'numero_empleado', 'departamento', 'estado', 'fecha_contratacion']
+    list_filter = ['estado', 'departamento', 'fecha_contratacion']
+    search_fields = ['usuario__username', 'usuario__email', 'numero_empleado']
