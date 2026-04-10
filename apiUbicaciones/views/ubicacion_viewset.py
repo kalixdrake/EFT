@@ -2,7 +2,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
 
-from apiUsuarios.permissions import RoleScopePermission
+from apiUsuarios.permissions import IsAdministradorOrInterno, RoleScopePermission, scope_queryset
 from apiUsuarios.rbac_contracts import Resources
 
 from ..models import (
@@ -29,6 +29,16 @@ class _BaseUbicacionViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleScopePermission]
     rbac_resource = Resources.PEDIDO
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [RoleScopePermission(), IsAdministradorOrInterno()]
+        return [RoleScopePermission()]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
 
 
 class PaisViewSet(_BaseUbicacionViewSet):

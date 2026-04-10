@@ -44,7 +44,7 @@ class NominaViewSet(viewsets.ModelViewSet):
         return NominaSerializer
     
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'aprobar_pago']:
             # Solo administradores pueden gestionar nóminas
             permission_classes = [RoleScopePermission, IsAdministrador]
         else:
@@ -57,7 +57,7 @@ class NominaViewSet(viewsets.ModelViewSet):
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministrador])
+    @action(detail=True, methods=['post'])
     def aprobar_pago(self, request, pk=None):
         """Permite a administradores aprobar y marcar como pagada una nómina"""
         nomina = self.get_object()
@@ -76,31 +76,31 @@ class NominaViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(nomina)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAdministrador])
+    @action(detail=False, methods=['get'])
     def pendientes(self, request):
         """Lista nóminas pendientes de pago"""
-        nominas = self.queryset.filter(estado='PENDIENTE')
+        nominas = self.get_queryset().filter(estado='PENDIENTE')
         serializer = NominaSerializer(nominas, many=True)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAdministrador])
+    @action(detail=False, methods=['get'])
     def retrasadas(self, request):
         """Lista nóminas retrasadas (pendientes con fecha vencida)"""
         hoy = timezone.now().date()
-        nominas = self.queryset.filter(
+        nominas = self.get_queryset().filter(
             estado='PENDIENTE',
             fecha_pago_programada__lt=hoy
         )
         serializer = NominaSerializer(nominas, many=True)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAdministrador])
+    @action(detail=False, methods=['get'])
     def resumen_mensual(self, request):
         """Calcula el gasto total en nóminas del mes actual"""
         hoy = timezone.now().date()
         inicio_mes = hoy.replace(day=1)
         
-        nominas_mes = self.queryset.filter(
+        nominas_mes = self.get_queryset().filter(
             fecha_pago_programada__gte=inicio_mes,
             fecha_pago_programada__lte=hoy
         )

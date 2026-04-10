@@ -12,6 +12,8 @@ urlpatterns = [
     path('api/', include('apiInventario.urls')),
     path('api/', include('apiPedidos.urls')),
     path('api/', include('apiImpuestos.urls')),
+    path('api/', include('apiDocumentos.urls')),
+    path('api/', include('apiAuditoria.urls')),
     path('api/', include('apiUbicaciones.urls')),
     path('api/', include('apiBancos.urls')),
     path('api/', include('apiCuentas.urls')),
@@ -29,4 +31,3 @@ urlpatterns = [
 # Servir archivos media en desarrollo
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

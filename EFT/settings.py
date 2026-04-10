@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     'apiInventario',  # Nueva app de inventario
     'apiPedidos',  # Nueva app de pedidos
     'apiImpuestos',
+    'apiDocumentos',
+    'apiAuditoria',
     'apiUbicaciones',
     'apiBancos',
     'apiCuentas',
@@ -63,6 +65,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apiAuditoria.middleware.AuditoriaMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

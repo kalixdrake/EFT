@@ -12,7 +12,7 @@ from ..serializers import (
     UsuarioListSerializer
 )
 from ..permissions import IsPropietarioOAdministrador
-from ..permissions import RoleScopePermission, scope_queryset
+from ..permissions import RoleScopePermission, build_capabilities, build_frontend_menu, get_user_roles, scope_queryset
 from ..rbac_contracts import Resources
 
 
@@ -51,3 +51,20 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         """Endpoint para obtener información del usuario actual"""
         serializer = UsuarioSerializer(request.user)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='capacidades')
+    def capacidades(self, request):
+        """Contrato de capacidades para inicialización del frontend."""
+        return Response(
+            {
+                "user_id": request.user.id,
+                "tipo_entidad": request.user.tipo_entidad_principal(),
+                "roles": sorted(get_user_roles(request.user)),
+                "capabilities": build_capabilities(request.user),
+            }
+        )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='menu')
+    def menu(self, request):
+        """Contrato de menú frontend derivado de capacidades del usuario."""
+        return Response({"items": build_frontend_menu(request.user)})

@@ -5,7 +5,7 @@ from collections import defaultdict
 from django.contrib.auth.models import Group
 from rest_framework import permissions
 
-from .rbac_contracts import Actions, Capability, Resources, Roles, Scopes
+from .rbac_contracts import Actions, Capability, FRONTEND_MENU_CATALOG, Resources, Roles, Scopes
 
 
 RESOURCE_GRANTS = {
@@ -129,6 +129,29 @@ RESOURCE_GRANTS = {
         (Roles.ADMIN_GENERAL, Actions.READ, Scopes.COMPANY),
         (Roles.AUDITOR, Actions.READ, Scopes.COMPANY),
     ],
+    Resources.DOCUMENTO: [
+        (Roles.SUPER_ADMIN, Actions.READ, Scopes.GLOBAL),
+        (Roles.SUPER_ADMIN, Actions.CREATE, Scopes.GLOBAL),
+        (Roles.SUPER_ADMIN, Actions.UPDATE, Scopes.GLOBAL),
+        (Roles.SUPER_ADMIN, Actions.DELETE, Scopes.GLOBAL),
+        (Roles.ADMIN_GENERAL, Actions.READ, Scopes.COMPANY),
+        (Roles.ADMIN_GENERAL, Actions.CREATE, Scopes.COMPANY),
+        (Roles.ADMIN_GENERAL, Actions.UPDATE, Scopes.COMPANY),
+        (Roles.ADMIN_GENERAL, Actions.DELETE, Scopes.COMPANY),
+        (Roles.CONTABILIDAD, Actions.READ, Scopes.COMPANY),
+        (Roles.CONTABILIDAD, Actions.CREATE, Scopes.COMPANY),
+        (Roles.CONTABILIDAD, Actions.UPDATE, Scopes.COMPANY),
+        (Roles.RRHH, Actions.READ, Scopes.COMPANY),
+        (Roles.RRHH, Actions.CREATE, Scopes.COMPANY),
+        (Roles.RRHH, Actions.UPDATE, Scopes.COMPANY),
+        (Roles.COMERCIAL, Actions.READ, Scopes.COMPANY),
+        (Roles.COMERCIAL, Actions.CREATE, Scopes.COMPANY),
+        (Roles.COMERCIAL, Actions.UPDATE, Scopes.COMPANY),
+        (Roles.AUDITOR, Actions.READ, Scopes.COMPANY),
+        (Roles.USUARIO_EXTERNO, Actions.READ, Scopes.OWN),
+        (Roles.USUARIO_EXTERNO, Actions.CREATE, Scopes.OWN),
+        (Roles.USUARIO_EXTERNO, Actions.UPDATE, Scopes.OWN),
+    ],
 }
 
 SCOPE_ORDER = {
@@ -139,7 +162,18 @@ SCOPE_ORDER = {
     Scopes.GLOBAL: 5,
 }
 
-OWNER_FIELDS = ("usuario", "cliente", "empleado", "owner", "user", "interno_asignado")
+OWNER_FIELDS = (
+    "usuario",
+    "cliente",
+    "empleado",
+    "socio",
+    "owner",
+    "user",
+    "interno_asignado",
+    "usuario_propietario",
+    "usuario_creador",
+    "usuario_editor",
+)
 
 METHOD_ACTION_MAP = {
     "GET": Actions.READ,
@@ -212,11 +246,45 @@ def build_capabilities(user) -> list[dict]:
     return sorted(capabilities, key=lambda c: (c["resource"], c["action"]))
 
 
+def build_frontend_menu(user) -> list[dict]:
+    menu = []
+    for item in FRONTEND_MENU_CATALOG:
+        actions = item.get("actions", [Actions.READ])
+        has_access = any(get_capability_scope(user, item["resource"], action) for action in actions)
+        if not has_access:
+            continue
+        menu.append(
+            {
+                "id": item["id"],
+                "label": item["label"],
+                "route": item["route"],
+                "icon": item["icon"],
+                "resource": item["resource"],
+                "order": item["order"],
+            }
+        )
+    return sorted(menu, key=lambda item: item["order"])
+
+
 def _resolve_owner_filter(model, user):
     model_field_names = {f.name for f in model._meta.get_fields() if hasattr(f, "name")}
     for owner_field in OWNER_FIELDS:
-        if owner_field in model_field_names:
-            return {owner_field: user}
+        if owner_field not in model_field_names:
+            continue
+
+        if owner_field == "cliente":
+            if hasattr(user, "cliente"):
+                return {"cliente": user.cliente}
+            continue
+        if owner_field == "empleado":
+            if hasattr(user, "empleado"):
+                return {"empleado": user.empleado}
+            continue
+        if owner_field == "socio":
+            if hasattr(user, "socio"):
+                return {"socio": user.socio}
+            continue
+        return {owner_field: user}
     if hasattr(user, "_meta") and model == user._meta.model:
         return {"id": user.id}
     return None
@@ -237,8 +305,16 @@ def has_object_scope(user, obj, scope: str) -> bool:
     if hasattr(obj, "id") and hasattr(user, "_meta") and obj.__class__ == user._meta.model:
         return obj.id == user.id
     for owner_field in OWNER_FIELDS:
-        if hasattr(obj, owner_field):
-            return getattr(obj, owner_field) == user
+        if not hasattr(obj, owner_field):
+            continue
+        owner_value = getattr(obj, owner_field)
+        if owner_field == "cliente":
+            return hasattr(user, "cliente") and owner_value == user.cliente
+        if owner_field == "empleado":
+            return hasattr(user, "empleado") and owner_value == user.empleado
+        if owner_field == "socio":
+            return hasattr(user, "socio") and owner_value == user.socio
+        return owner_value == user
     return False
 
 

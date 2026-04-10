@@ -29,6 +29,7 @@ from apiTransacciones.serializers.programacion_serializer import (
 
 from apiTransacciones.filters.programacion_filter import ProgramacionTransaccionFilter
 from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.permissions import IsAdministradorOrInterno
 from apiUsuarios.rbac_contracts import Resources, Actions
 
 
@@ -66,11 +67,16 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy", "activar", "desactivar", "cancelar", "ejecutar"]:
+            return [RoleScopePermission(), IsAdministradorOrInterno()]
+        return [RoleScopePermission()]
     
     @action(detail=False, methods=['get'], url_path='pendientes')
     def pendientes(self, request):
         """Get all pending programmed transactions"""
-        programaciones = ProgramacionTransaccion.objects.filter(
+        programaciones = self.get_queryset().filter(
             estado='PENDIENTE',
             activa=True
         )
@@ -84,7 +90,7 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='activas')
     def activas(self, request):
         """Get all active programmed transactions"""
-        programaciones = ProgramacionTransaccion.objects.filter(activa=True)
+        programaciones = self.get_queryset().filter(activa=True)
         
         filterset = ProgramacionTransaccionFilter(request.query_params, queryset=programaciones)
         programaciones = filterset.qs
@@ -206,13 +212,15 @@ class ProgramacionTransaccionViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], url_path='presupuesto-consolidado')
     def presupuesto_consolidado(self, request):
+        scope = getattr(request, "_eft_scope", "OWN")
+        cuentas_scope = scope_queryset(Cuenta.objects.all(), request.user, scope)
         cuentas_ids = request.query_params.getlist('cuentas')
         if cuentas_ids:
-            cuentas = Cuenta.objects.filter(id__in=cuentas_ids)
+            cuentas = cuentas_scope.filter(id__in=cuentas_ids)
         else:
-            cuentas = Cuenta.objects.all()
+            cuentas = cuentas_scope
 
-        programaciones = ProgramacionTransaccion.objects.filter(
+        programaciones = self.get_queryset().filter(
             estado='PENDIENTE',
             activa=True
         )

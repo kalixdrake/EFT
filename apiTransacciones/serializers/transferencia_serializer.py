@@ -6,6 +6,7 @@ from apiCuentas.models.cuenta_model import Cuenta
 from apiTransacciones.models.transaccion_model import Transaccion
 from apiTransacciones.models.categorias_model import Categoria
 from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
+from apiUsuarios.permissions import scope_queryset
 
 
 class TransferenciaSerializer(serializers.Serializer):
@@ -16,6 +17,17 @@ class TransferenciaSerializer(serializers.Serializer):
     fecha_ejecucion = serializers.DateTimeField(required=False, allow_null=True)
 
     def validate(self, data):
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            raise serializers.ValidationError("Usuario autenticado requerido.")
+
+        scope = getattr(request, "_eft_scope", "OWN")
+        cuentas_permitidas = scope_queryset(Cuenta.objects.all(), request.user, scope)
+        if not cuentas_permitidas.filter(id=data["cuenta_origen"].id).exists():
+            raise serializers.ValidationError({"cuenta_origen": "Sin acceso a la cuenta origen."})
+        if not cuentas_permitidas.filter(id=data["cuenta_destino"].id).exists():
+            raise serializers.ValidationError({"cuenta_destino": "Sin acceso a la cuenta destino."})
+
         if data['cuenta_origen'] == data['cuenta_destino']:
             raise serializers.ValidationError("La cuenta origen y destino no pueden ser la misma.")
 

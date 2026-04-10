@@ -43,11 +43,11 @@ Etapa	Nombre	Estado	Agente	Inicio	Fin	Notes
 1	IAM + RBAC + Alcances	DONE	Agente-1	2026-04-09	2026-04-09	RBAC v2 aplicado en endpoints clave, scopes activos y pruebas negativas
 2	Identidad: Usuario/Cliente/Socio/Empleado	DONE	Agente-1	2026-04-09	2026-04-09	Separación Usuario vs Cliente/Socio/Empleado + endpoints y tests de etapa
 3	apiUbicaciones	DONE	Agente-1	2026-04-09	2026-04-09	Jerarquía País/Departamento/Ciudad/Ubicación + relaciones por entidad + filtros + integración pedidos
-4	apiImpuestos	TODO	-	-	-	-
-5	Inventario dual y Activos	TODO	-	-	-	-
-6	apiDocumentos versionado	TODO	-	-	-	-
-7	Hardening de endpoints y permisos	TODO	-	-	-	-
-8	apiAuditoria transversal	TODO	-	-	-	-
+4	apiImpuestos	DONE	Agente-1	2026-04-09	2026-04-09	Modelos/reglas/asignaciones/snapshots + integración en pedidos y conceptos laborales
+5	Inventario dual y Activos	DONE	Agente-1	2026-04-09	2026-04-09	ActivoFijo + depreciación/mantenimiento/movimientos + asignación por empleado/ubicación
+6	apiDocumentos versionado	DONE	Agente-2	2026-04-10	2026-04-10	apiDocumentos con TipoDocumento/Documento/VersionDocumento/AccesoDocumento, versionado por update y ACL por rol/propietario
+7	Hardening de endpoints y permisos	DONE	Agente-2	2026-04-10	2026-04-10	Inventario endpoint-permiso completo + cierre de bypass en custom actions + scoping estricto en querysets
+8	apiAuditoria transversal	DONE	Agente-2	2026-04-10	2026-04-10	Auditoría automática por middleware + endpoint de consulta + retención configurable
 9	Seeds + contrato frontend de permisos	TODO	-	-	-	-
 10	QA seguridad de permisos	TODO	-	-	-	-
 Estados válidos: TODO, IN_PROGRESS, BLOCKED, DONE
@@ -133,7 +133,7 @@ Reglas Globales (No Negociables)
 4. No “silencies” errores de test deshabilitando pruebas.
 5. Si detectas deuda técnica crítica previa, repórtala y propón fix mínimo seguro.
 6. Todo cambio debe incluir validación de permisos/roles cuando aplique.
-7. Si una decisión rompe compatibilidad, debe quedar explícita en “Breaking Changes”.
+7. Si una decisión rompe compatibilidad, puedes borrar las migraciones previas y rehacerlas, el proyecto está en fase inicial.
 
 Flujo de Trabajo Obligatorio
 1. Analiza STAGE_SCOPE y mapea archivos/símbolos impactados.
@@ -528,3 +528,39 @@ Acción: Implementación de inventario dual en apiInventario manteniendo Product
 Resultado: DONE
 Evidencia test: ejecución focal con Django test runner sin migraciones persistentes (apiInventario.tests apiPedidos.tests) -> 6/6 OK
 Próximo paso: Etapa 6 (apiDocumentos versionado) con propietarios por tipo, control de acceso y versionado por actualización.
+
+Registro
+Fecha: 2026-04-10
+Etapa: 6
+Agente: Agente-2
+Acción: Implementación de apiDocumentos con modelos TipoDocumento/Documento/VersionDocumento/AccesoDocumento, validación estricta de propietario por tipo, versionado automático al crear/actualizar archivo, endpoints de visualización/descarga/versiones y trazabilidad de acceso por evento; integración RBAC de recurso DOCUMENTO en matriz de permisos y exposición de rutas API.
+Resultado: DONE
+Evidencia test: USE_SQLITE=true python manage.py test apiDocumentos.tests apiUsuarios.tests apiInventario.tests apiPedidos.tests -v 1 (18/18 OK)
+Próximo paso: Etapa 7 (Hardening de endpoints y permisos) con matriz endpoint-permiso-rol completa y pruebas negativas masivas.
+
+Registro
+Fecha: 2026-04-10
+Etapa: 7
+Agente: Agente-2
+Acción: Hardening transversal de permisos con eliminación de bypass en @action, estandarización de guardas RoleScopePermission+roles internos/admin, aplicación de scope_queryset en módulos que carecían de filtro (Usuarios, Ubicaciones, Bancos, Cuentas), validación de alcance en transferencias (cuenta_origen/cuenta_destino) y reemplazo de accesos directos self.queryset/objects.filter por self.get_queryset en acciones sensibles; adicionalmente se creó inventario técnico formal de endpoints y niveles de acceso en EFT/endpoint_permission_matrix.py.
+Resultado: DONE
+Evidencia test: USE_SQLITE=true python manage.py test apiUsuarios.tests apiInventario.tests apiInventario.tests_stage7 apiPedidos.tests apiTransacciones.tests apiUbicaciones.tests apiBancos.tests apiCuentas.tests apiDocumentos.tests -v 1 (52/52 OK)
+Próximo paso: Etapa 8 (apiAuditoria transversal) para consolidar trazabilidad unificada de accesos y mutaciones sensibles.
+
+Registro
+Fecha: 2026-04-10
+Etapa: 8
+Agente: Agente-2
+Acción: Creación de apiAuditoria transversal con modelo EventoAuditoria (usuario, endpoint, método, acción, recurso, resultado, código, IP, user-agent y metadata), middleware global de captura automática para endpoints críticos y respuestas 4xx/5xx, endpoint de consulta `/api/auditoria-eventos/` protegido por RBAC (Resources.AUDITORIA), comando de retención/archivado `archivar_eventos_auditoria` con umbral configurable y pruebas de trazabilidad para accesos a documentos y denegaciones de seguridad.
+Resultado: DONE
+Evidencia test: USE_SQLITE=true python manage.py test apiAuditoria.tests apiDocumentos.tests apiUsuarios.tests apiInventario.tests apiPedidos.tests apiImpuestos.tests apiTransacciones.tests -v 1 (47/47 OK)
+Próximo paso: Etapa 9 (Seeds + contrato frontend de permisos) para preparar perfiles/capacidades operativas de UI.
+
+Registro
+Fecha: 2026-04-10
+Etapa: 9
+Agente: Agente-2
+Acción: Implementación de contrato frontend en apiUsuarios con endpoint `/api/usuarios/capacidades/` (roles + capabilities) y endpoint `/api/usuarios/menu/` derivado de permisos RBAC; definición de catálogo de menú frontend en `rbac_contracts`; ampliación de comando `cargar_datos_iniciales` con seeds de roles operativos y usuarios de ejemplo por área; incorporación de fixture `json/init_usuarios_permisos_stage9.json` para grupos base.
+Resultado: DONE
+Evidencia test: .venv/bin/python manage.py test apiUsuarios.tests -v 1 (16/16 OK) y .venv/bin/python manage.py test -v 1 (61/61 OK)
+Próximo paso: Etapa 10 (QA seguridad de permisos) con pruebas de caja negra y validación de escalamiento de privilegios.

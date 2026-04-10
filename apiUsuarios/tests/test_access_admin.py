@@ -30,3 +30,17 @@ class AdminAccessTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_capacidades_contract_for_admin(self):
+        response = self.client.get("/api/usuarios/capacidades/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("roles", response.data)
+        self.assertIn("ADMIN_GENERAL", response.data["roles"])
+        self.assertIn("capabilities", response.data)
+        self.assertTrue(any(item["resource"] == "user" for item in response.data["capabilities"]))
+
+    def test_menu_contract_for_admin(self):
+        response = self.client.get("/api/usuarios/menu/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("items", response.data)
+        self.assertTrue(any(item["id"] == "usuarios" for item in response.data["items"]))

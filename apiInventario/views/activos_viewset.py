@@ -32,7 +32,7 @@ class CategoriaActivoViewSet(viewsets.ModelViewSet):
     ordering = ["nombre"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.action in ["create", "update", "partial_update", "destroy", "calcular_mes"]:
             return [RoleScopePermission(), IsAdministradorOrInterno()]
         return [RoleScopePermission()]
 
@@ -112,7 +112,9 @@ class DepreciacionActivoViewSet(viewsets.ModelViewSet):
         else:
             fecha_obj = date.today()
 
-        activos = ActivoFijo.objects.filter(activo=True).exclude(estado=ActivoFijo.EstadoActivo.BAJA)
+        activos = scope_queryset(ActivoFijo.objects.all(), request.user, getattr(request, "_eft_scope", "OWN")).filter(
+            activo=True
+        ).exclude(estado=ActivoFijo.EstadoActivo.BAJA)
         creados = 0
         for activo in activos:
             dep = DepreciacionActivo.registrar_lineal(activo=activo, fecha=fecha_obj)
@@ -175,4 +177,3 @@ class MovimientoActivoViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
-

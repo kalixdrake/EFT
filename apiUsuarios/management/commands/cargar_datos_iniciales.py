@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.contrib.auth.models import Group
 
 from apiUsuarios.models import Usuario, Cliente, Socio, Empleado
+from apiUsuarios.rbac_contracts import Roles
 from apiInventario.models import Producto
 from apiTransacciones.models import Categoria
 from apiBancos.models import Banco
@@ -43,7 +44,32 @@ class Command(BaseCommand):
     def crear_usuarios(self):
         """Crear usuarios de ejemplo con entidad explícita"""
 
+        roles_operativos = [
+            Roles.SUPER_ADMIN,
+            Roles.ADMIN_GENERAL,
+            Roles.AUDITOR,
+            Roles.CONTABILIDAD,
+            Roles.RRHH,
+            Roles.LOGISTICA,
+            Roles.COMERCIAL,
+            Roles.INVENTARIO,
+            Roles.SOPORTE,
+            Roles.USUARIO_EXTERNO,
+        ]
+        for role in roles_operativos:
+            Group.objects.get_or_create(name=role)
+
         usuarios_crear = [
+            {
+                'username': 'superadmin',
+                'email': 'superadmin@eft.com',
+                'password': 'superadmin123',
+                'first_name': 'Root',
+                'last_name': 'EFT',
+                'telefono': '555-0000',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.SUPER_ADMIN,
+            },
             {
                 'username': 'cliente1',
                 'email': 'cliente1@eft.com',
@@ -52,7 +78,7 @@ class Command(BaseCommand):
                 'last_name': 'Pérez',
                 'telefono': '555-0001',
                 'tipo_entidad': 'CLIENTE',
-                'grupo': 'USUARIO_EXTERNO',
+                'grupo': Roles.USUARIO_EXTERNO,
             },
             {
                 'username': 'socio1',
@@ -62,7 +88,7 @@ class Command(BaseCommand):
                 'last_name': 'González',
                 'telefono': '555-0002',
                 'tipo_entidad': 'SOCIO',
-                'grupo': 'USUARIO_EXTERNO',
+                'grupo': Roles.USUARIO_EXTERNO,
             },
             {
                 'username': 'interno1',
@@ -72,7 +98,67 @@ class Command(BaseCommand):
                 'last_name': 'Ramírez',
                 'telefono': '555-0003',
                 'tipo_entidad': 'EMPLEADO',
-                'grupo': 'ADMIN_GENERAL',
+                'grupo': Roles.ADMIN_GENERAL,
+            },
+            {
+                'username': 'contabilidad1',
+                'email': 'contabilidad1@eft.com',
+                'password': 'conta123',
+                'first_name': 'Ana',
+                'last_name': 'Contable',
+                'telefono': '555-0004',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.CONTABILIDAD,
+            },
+            {
+                'username': 'rrhh1',
+                'email': 'rrhh1@eft.com',
+                'password': 'rrhh123',
+                'first_name': 'Luis',
+                'last_name': 'Talento',
+                'telefono': '555-0005',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.RRHH,
+            },
+            {
+                'username': 'logistica1',
+                'email': 'logistica1@eft.com',
+                'password': 'logistica123',
+                'first_name': 'Carla',
+                'last_name': 'Ruta',
+                'telefono': '555-0006',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.LOGISTICA,
+            },
+            {
+                'username': 'comercial1',
+                'email': 'comercial1@eft.com',
+                'password': 'comercial123',
+                'first_name': 'Pedro',
+                'last_name': 'Ventas',
+                'telefono': '555-0007',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.COMERCIAL,
+            },
+            {
+                'username': 'inventario1',
+                'email': 'inventario1@eft.com',
+                'password': 'inventario123',
+                'first_name': 'Lucia',
+                'last_name': 'Stock',
+                'telefono': '555-0008',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.INVENTARIO,
+            },
+            {
+                'username': 'auditor1',
+                'email': 'auditor1@eft.com',
+                'password': 'auditor123',
+                'first_name': 'Marco',
+                'last_name': 'Control',
+                'telefono': '555-0009',
+                'tipo_entidad': 'EMPLEADO',
+                'grupo': Roles.AUDITOR,
             },
         ]
 
@@ -108,6 +194,10 @@ class Command(BaseCommand):
                         usuario=usuario,
                         defaults={'numero_empleado': f'EMP-{usuario.id}', 'salario_base': Decimal('0.00')}
                     )
+            else:
+                usuario = Usuario.objects.get(username=username)
+                group_obj, _ = Group.objects.get_or_create(name=grupo)
+                usuario.groups.add(group_obj)
 
     def crear_categorias(self):
         """Crear categorías empresariales"""
@@ -218,6 +308,13 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS('\n🔑 CREDENCIALES DE ACCESO:'))
         self.stdout.write('  Admin: admin / admin123')
+        self.stdout.write('  Super Admin: superadmin / superadmin123')
         self.stdout.write('  Cliente: cliente1 / cliente123')
         self.stdout.write('  Socio: socio1 / socio123')
         self.stdout.write('  Interno: interno1 / interno123')
+        self.stdout.write('  Contabilidad: contabilidad1 / conta123')
+        self.stdout.write('  RRHH: rrhh1 / rrhh123')
+        self.stdout.write('  Logística: logistica1 / logistica123')
+        self.stdout.write('  Comercial: comercial1 / comercial123')
+        self.stdout.write('  Inventario: inventario1 / inventario123')
+        self.stdout.write('  Auditor: auditor1 / auditor123')

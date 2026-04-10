@@ -3,7 +3,6 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
@@ -58,7 +57,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministrador])
+    @action(detail=True, methods=['post'])
     def aprobar(self, request, pk=None):
         """Permite a administradores aprobar pedidos de socios"""
         pedido = self.get_object()
@@ -81,7 +80,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(pedido)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministradorOrInterno])
+    @action(detail=True, methods=['post'])
     def cambiar_estado(self, request, pk=None):
         """Permite a internos/admins cambiar el estado de un pedido"""
         pedido = self.get_object()
@@ -115,7 +114,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(pedido)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministradorOrInterno])
+    @action(detail=True, methods=['post'])
     def registrar_pago(self, request, pk=None):
         """Registra un pago parcial o total para un pedido"""
         pedido = self.get_object()
@@ -159,7 +158,7 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministradorOrInterno])
+    @action(detail=True, methods=['post'])
     def asignar_interno(self, request, pk=None):
         """Asigna un usuario interno al pedido"""
         pedido = self.get_object()
@@ -187,9 +186,9 @@ class PedidoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'])
     def mis_pedidos(self, request):
         """Endpoint para que usuarios vean sus propios pedidos"""
-        pedidos = self.queryset.filter(cliente=request.user)
+        pedidos = self.get_queryset().filter(cliente=request.user)
         serializer = PedidoListSerializer(pedidos, many=True)
         return Response(serializer.data)

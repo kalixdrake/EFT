@@ -2,7 +2,6 @@ from django.db import models
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
@@ -60,19 +59,19 @@ class ProductoViewSet(viewsets.ModelViewSet):
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'])
     def bajo_stock(self, request):
         """Retorna productos con stock bajo (necesitan reabastecimiento)"""
-        productos = self.queryset.filter(stock_actual__lte=models.F('stock_minimo'))
+        productos = self.get_queryset().filter(stock_actual__lte=models.F('stock_minimo'))
         serializer = ProductoListSerializer(productos, many=True)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'])
     def valor_total_inventario(self, request):
         """Calcula el valor total del inventario"""
         from django.db.models import Sum, F
         
-        total = self.queryset.aggregate(
+        total = self.get_queryset().aggregate(
             valor_total=Sum(F('precio_base') * F('stock_actual'))
         )
         
@@ -80,7 +79,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             'valor_total_inventario': total['valor_total'] or 0
         })
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAdministradorOrInterno])
+    @action(detail=True, methods=['post'])
     def ajustar_stock(self, request, pk=None):
         """Permite ajustar manualmente el stock de un producto"""
         producto = self.get_object()
@@ -159,7 +158,7 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'])
     def por_producto(self, request):
         """Obtiene el historial de movimientos de un producto específico"""
         producto_id = request.query_params.get('producto_id')
@@ -170,6 +169,6 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        movimientos = self.queryset.filter(producto_id=producto_id)
+        movimientos = self.get_queryset().filter(producto_id=producto_id)
         serializer = self.get_serializer(movimientos, many=True)
         return Response(serializer.data)

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from ..models import Socio
 from ..permissions import IsAdministradorOrInterno
-from ..permissions import RoleScopePermission
+from ..permissions import RoleScopePermission, scope_queryset
 from ..rbac_contracts import Actions, Resources
 from ..serializers import SocioSerializer
 
@@ -19,7 +19,17 @@ class SocioViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["activo", "fecha_acuerdo"]
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAdministradorOrInterno])
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy", "ajustar_saldo"]:
+            return [RoleScopePermission(), IsAdministradorOrInterno()]
+        return [RoleScopePermission()]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        scope = getattr(self.request, "_eft_scope", "OWN")
+        return scope_queryset(queryset, self.request.user, scope)
+
+    @action(detail=True, methods=["post"])
     def ajustar_saldo(self, request, pk=None):
         socio = self.get_object()
         monto = request.data.get("monto")

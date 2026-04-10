@@ -1,0 +1,72 @@
+[
+  {
+    "model": "auth.group",
+    "pk": 1001,
+    "fields": {
+      "name": "SUPER_ADMIN"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1002,
+    "fields": {
+      "name": "ADMIN_GENERAL"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1003,
+    "fields": {
+      "name": "AUDITOR"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1004,
+    "fields": {
+      "name": "CONTABILIDAD"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1005,
+    "fields": {
+      "name": "RRHH"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1006,
+    "fields": {
+      "name": "LOGISTICA"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1007,
+    "fields": {
+      "name": "COMERCIAL"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1008,
+    "fields": {
+      "name": "INVENTARIO"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1009,
+    "fields": {
+      "name": "SOPORTE"
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 1010,
+    "fields": {
+      "name": "USUARIO_EXTERNO"
+    }
+  }
+]

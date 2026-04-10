@@ -6,7 +6,7 @@ from apiTransacciones.models.transaccion_model import Transaccion
 from apiTransacciones.serializers.transaccion_serializer import TransaccionSerializer
 from apiTransacciones.serializers.transferencia_serializer import TransferenciaSerializer
 from apiTransacciones.filters.transaccion_filter import TransaccionFilter
-from apiUsuarios.permissions import RoleScopePermission, scope_queryset
+from apiUsuarios.permissions import IsAdministradorOrInterno, RoleScopePermission, scope_queryset
 from apiUsuarios.rbac_contracts import Resources, Actions
 
 
@@ -24,9 +24,14 @@ class TransaccionViewSet(viewsets.ModelViewSet):
         scope = getattr(self.request, "_eft_scope", "OWN")
         return scope_queryset(queryset, self.request.user, scope)
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy", "transferir"]:
+            return [RoleScopePermission(), IsAdministradorOrInterno()]
+        return [RoleScopePermission()]
+
     @action(detail=False, methods=['post'], url_path='transferir')
     def transferir(self, request):
-        serializer = TransferenciaSerializer(data=request.data)
+        serializer = TransferenciaSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             return Response({'status': 'Transferencia creada exitosamente'}, status=status.HTTP_201_CREATED)
