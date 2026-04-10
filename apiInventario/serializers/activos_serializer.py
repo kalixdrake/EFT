@@ -17,10 +17,8 @@ class CategoriaActivoSerializer(serializers.ModelSerializer):
 
 
 class ActivoFijoSerializer(serializers.ModelSerializer):
-    valor_depreciable = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source="valor_depreciable")
-    depreciacion_mensual_estimado = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True, source="depreciacion_mensual_estimado"
-    )
+    valor_depreciable = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    depreciacion_mensual_estimado = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = ActivoFijo

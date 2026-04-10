@@ -198,9 +198,7 @@ def get_user_roles(user) -> set[str]:
     if user.is_superuser:
         roles.add(Roles.SUPER_ADMIN)
 
-    if hasattr(user, "empleado"):
-        roles.add(Roles.ADMIN_GENERAL)
-    elif hasattr(user, "socio"):
+    if hasattr(user, "socio"):
         roles.add(Roles.USUARIO_EXTERNO)
     elif hasattr(user, "cliente"):
         roles.add(Roles.USUARIO_EXTERNO)

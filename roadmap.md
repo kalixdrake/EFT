@@ -564,3 +564,109 @@ Acción: Implementación de contrato frontend en apiUsuarios con endpoint `/api/
 Resultado: DONE
 Evidencia test: .venv/bin/python manage.py test apiUsuarios.tests -v 1 (16/16 OK) y .venv/bin/python manage.py test -v 1 (61/61 OK)
 Próximo paso: Etapa 10 (QA seguridad de permisos) con pruebas de caja negra y validación de escalamiento de privilegios.
+
+Registro
+Fecha: 2026-04-10
+Etapa: 10
+Agente: Copilot
+Acción: QA de seguridad de permisos con cobertura negativa de escalamiento vertical y lateral en módulos críticos; corrección de brecha RBAC en `get_user_roles` (eliminación de elevación implícita a ADMIN_GENERAL por solo tener entidad Empleado); refuerzo de validación en creación de pedidos para impedir creación lateral en nombre de terceros; incorporación de baterías Stage10 en Usuarios, Pedidos, Transacciones, Documentos, Bancos y Cuentas; entrega de documentación integral de seguridad e integración frontend en `stage10_security_frontend_integration.md`.
+Resultado: DONE
+Evidencia test: Usuario confirmó ejecución de `USE_SQLITE=true python manage.py test -v 1` con suite completa en verde en Git Bash; etapa cerrada con nuevos escenarios negativos agregados para no-regresión de permisos.
+Próximo paso: Monitorear hallazgos de UAT/frontend contra `capabilities` y `menu`, y ampliar pruebas Stage10 a módulos secundarios (Impuestos/Ubicaciones/Auditoría) si se incorporan nuevas acciones sensibles.
+
+
+## Plan: Tienda RN con RBAC, Dashboards y Chat por Rol
+
+Construir un frontend React Native API-only para e-commerce B2B/B2C sobre el backend actual, reforzando primero el contrato móvil (JWT + bootstrap me/capacidades/menu), y extender backend donde haga falta para: chat IA por rol (prompt segmentado), retiro de la plantilla/ruta HTML legacy de chat, y dashboards internos basados en endpoints existentes. La integración de pagos será in-app con SDK/WebView y tokenización/redirección segura para no almacenar datos sensibles.
+
+**Steps**
+1. Fase 0 - Descubrimiento técnico final y contrato API móvil
+1.1 Consolidar OpenAPI y matriz RBAC como fuente contractual para frontend móvil: mapear recursos/acciones/scope a pantallas y acciones UI.
+1.2 Definir contrato de sesión móvil: login JWT, refresh token, bootstrap con me/capacidades/menu, expiración y renovación silenciosa.
+1.3 Cerrar catálogo de acciones sensibles por módulo (pedidos, transacciones, inventario, documentos) y definir comportamiento UI estándar en 401/403/404.
+
+2. Fase 1 - Hardening backend para consumo React Native (bloqueante)
+2.1 Implementar autenticación JWT (SimpleJWT) y exponer endpoints de obtención/refresh/verify.
+2.2 Configurar DRF para móvil: authentication classes JWT, paginación por defecto y throttling por usuario/IP.
+2.3 Configurar CORS/CSRF para app móvil y dominios de API productiva.
+2.4 Ajustar documentación OpenAPI para nuevos endpoints de auth/chat v2.
+
+3. Fase 2 - Rediseño backend de chat IA por rol (bloqueante para Chat RN)
+3.1 Eliminar interfaz web legacy de chat removiendo la ruta HTML y su template.
+3.2 Mantener endpoint API de chat en namespace API (evitar ruta pública fuera de api) y protegerlo con autenticación.
+3.3 Evolucionar InteraccionIA para trazabilidad por usuario/rol (FK usuario + rol aplicado + metadata de permisos).
+3.4 Integrar prompts por rol usando generar_system_prompt_por_rol y desacoplar prompt hardcoded de procesar_prompt_con_ia.
+3.5 Aplicar guardas RBAC dentro del flujo IA: validar acciones sugeridas por IA contra capabilities efectivas del usuario antes de ejecutar tools.
+3.6 Versionar endpoint de chat (por ejemplo /api/interacciones/chat/ o /api/v2/chat/) y conservar compatibilidad temporal opcional con feature flag.
+
+4. Fase 3 - Arquitectura React Native (puede iniciar en paralelo con Fase 2 desde contrato)
+4.1 Crear app base RN (Expo recomendado para velocidad), módulos de infraestructura: API client, auth store, cache, error boundary, upload manager.
+4.2 Implementar capa de red tipada por dominios: usuarios, pedidos, inventario, finanzas, documentos, auditoría, chat.
+4.3 Implementar bootstrap post-login: me + capacidades + menu y derivar estado global de permisos.
+4.4 Implementar helper can(resource, action) y scope(resource, action) como única fuente de autorización UI.
+4.5 Implementar navegación dinámica por menú backend y guards de ruta/pantalla por capability.
+
+5. Fase 4 - UX funcional de tienda virtual por rol
+5.1 Clientes/Socios (tienda): catálogo, detalle producto, carrito, checkout, mis pedidos, mis documentos, chat asistido.
+5.2 Internos (management): dashboard por rol con KPIs y CTAs de gestión.
+5.3 Dashboards mínimos por rol interno (según endpoints existentes):
+- ADMIN_GENERAL/SUPER_ADMIN: salud operativa global, aprobaciones pendientes, auditoría reciente.
+- LOGISTICA/INVENTARIO: bajo_stock, ajustes, movimientos por producto, estado de pedidos.
+- CONTABILIDAD/RRHH: transacciones, programaciones pendientes, nómina pendiente/retrasada.
+- AUDITOR: vistas read-only de auditoría, finanzas y documentos sin mutaciones.
+5.4 Estandarizar experiencia de errores de permisos: 403 mensaje de autorización, 404 protegido retorna a listado sin revelar existencia.
+
+6. Fase 5 - Checkout y pagos in-app seguros (sin almacenar PAN)
+6.1 Definir Payment Orchestrator backend para iniciar pagos con proveedores externos (PSE, MercadoPago, tarjeta tokenizada).
+6.2 En móvil usar SDK/WebView oficial del proveedor y recibir callback seguro (deep link + webhook backend).
+6.3 Persistir solo metadata no sensible: transaction_id proveedor, estado, referencia interna, monto, timestamps.
+6.4 Nunca persistir PAN/CVV ni datos de tarjeta crudos en EFT.
+6.5 Implementar reconciliación de estado de pago y actualización de pedido vía endpoint interno.
+
+7. Fase 6 - Chat IA por rol en React Native
+7.1 Reemplazar chat único por experiencia segmentada por rol (placeholder, capacidades visibles, disclaimers por alcance).
+7.2 Adjuntos en chat con subida multipart y vista de estado de procesamiento.
+7.3 Mostrar telemetría de respuesta IA (rol aplicado, acciones permitidas/denegadas) para transparencia y soporte.
+7.4 Persistir historial por usuario y paginar conversaciones.
+
+8. Fase 7 - QA, seguridad y release
+8.1 Backend: ampliar tests Stage 10 para chat por rol, JWT, acceso no autenticado, y regresión de scope horizontal/vertical.
+8.2 Frontend: pruebas unitarias de guards can/scope y pruebas E2E por rol crítico.
+8.3 Pruebas de carga sobre endpoints de dashboard y chat.
+8.4 Runbook de despliegue: rotación de llaves, variables de entorno, monitoreo y alertas.
+
+**Relevant files**
+- c:/Python/Personal/EFT/EFT/urls.py — retirar include legacy de chat y versionar rutas API de interacciones
+- c:/Python/Personal/EFT/apiInteracciones/urls.py — eliminar path HTML y exponer endpoint API autenticado
+- c:/Python/Personal/EFT/apiInteracciones/templates/chat.html — eliminar plantilla web de chat legacy
+- c:/Python/Personal/EFT/apiInteracciones/views/interaccion_view.py — migrar a vista API autenticada con usuario contextual
+- c:/Python/Personal/EFT/apiInteracciones/models/interaccion_model.py — agregar trazabilidad por usuario/rol en interacciones
+- c:/Python/Personal/EFT/integrations/ai.py — inyectar prompt por rol y guardas de ejecución por capability
+- c:/Python/Personal/EFT/integrations/ai_prompts.py — mantener catálogo de prompts por tipo de entidad y políticas
+- c:/Python/Personal/EFT/apiUsuarios/permissions.py — reutilizar get_user_roles/build_capabilities/scope_queryset para enforcement IA y frontend contract
+- c:/Python/Personal/EFT/apiUsuarios/views/usuario_viewset.py — contrato bootstrap me/capacidades/menu
+- c:/Python/Personal/EFT/apiUsuarios/rbac_contracts.py — catálogo de recursos/acciones y menú base
+- c:/Python/Personal/EFT/EFT/settings.py — JWT auth classes, paginación, throttling, CORS y settings de seguridad
+- c:/Python/Personal/EFT/EFT/endpoint_permission_matrix.py — referencia para dashboards y guardas por endpoint
+
+**Verification**
+1. Ejecutar pruebas Stage 10 actuales y agregar suite específica para chat por rol y JWT.
+2. Verificar con pruebas por rol que can/scope en frontend coincide con respuestas reales de 403/404 backend.
+3. Validar flujo completo móvil: login JWT, refresh, bootstrap, navegación dinámica por menú.
+4. Validar hardening chat: usuario externo no ejecuta tools de finanzas internas; auditor solo consulta.
+5. Validar adjuntos chat en móvil (PDF/Excel/imagen) y límites de tamaño/tipo.
+6. Validar checkout in-app con sandbox de cada proveedor y webhooks de confirmación backend.
+7. Confirmar que en base de datos no se almacena PAN/CVV ni payload sensible de tarjeta.
+8. Verificar OpenAPI actualizado y colección de pruebas API para equipos frontend/QA.
+
+**Decisions**
+- Incluye frontend React Native y backend de soporte (no solo frontend).
+- Autenticación móvil objetivo: JWT (access/refresh).
+- Pago objetivo: integración in-app con SDK/WebView, tokenización y confirmación por backend.
+- Chat IA: una sola superficie de chat, comportamiento/prompt/políticas por rol.
+- Seguridad backend es autoridad final; frontend solo refleja capabilities.
+
+**Further Considerations**
+1. Elegir estrategia de rollout de chat v2: paralelo con v1 temporal o corte directo con ventana de mantenimiento.
+2. Definir proveedor principal de pagos para MVP (MercadoPago vs agregador multi-proveedor) para reducir complejidad inicial.
+3. Acordar SLOs de latencia para dashboard y chat antes de optimizar caché/colas.

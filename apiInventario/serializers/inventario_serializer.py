@@ -5,17 +5,9 @@ from ..models import Producto, MovimientoInventario
 class ProductoSerializer(serializers.ModelSerializer):
     """Serializer para el modelo Producto"""
     
-    necesita_reabastecimiento = serializers.BooleanField(
-        read_only=True,
-        source='necesita_reabastecimiento'
-    )
+    necesita_reabastecimiento = serializers.BooleanField(read_only=True)
     
-    valor_inventario = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        read_only=True,
-        source='valor_inventario'
-    )
+    valor_inventario = serializers.DecimalField(max_digits=12,decimal_places=2,read_only=True)
     
     class Meta:
         model = Producto

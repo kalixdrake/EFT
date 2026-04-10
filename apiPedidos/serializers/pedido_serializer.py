@@ -8,9 +8,9 @@ class DetallePedidoSerializer(serializers.ModelSerializer):
     """Serializer para detalles de pedido"""
     
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='subtotal')
-    monto_impuesto = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='monto_impuesto')
-    total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='total')
+    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    monto_impuesto = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     
     class Meta:
         model = DetallePedido
@@ -43,8 +43,8 @@ class PedidoSerializer(serializers.ModelSerializer):
     detalles = DetallePedidoSerializer(many=True, read_only=True)
     cliente_nombre = serializers.CharField(source='cliente.get_full_name', read_only=True)
     interno_nombre = serializers.CharField(source='interno_asignado.get_full_name', read_only=True, allow_null=True)
-    saldo_pendiente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='saldo_pendiente')
-    esta_pagado = serializers.BooleanField(read_only=True, source='esta_pagado')
+    saldo_pendiente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    esta_pagado = serializers.BooleanField(read_only=True)
     ubicacion_entrega_nombre = serializers.CharField(source='ubicacion_entrega.nombre', read_only=True, allow_null=True)
     
     class Meta:
@@ -68,6 +68,22 @@ class PedidoCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pedido
         fields = ['tipo', 'cliente', 'ubicacion_entrega', 'detalles', 'notas', 'porcentaje_descuento']
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = request.user if request else None
+        if not user:
+            raise serializers.ValidationError("Usuario no autenticado")
+
+        cliente_objetivo = attrs.get("cliente")
+        if not user.es_administrador():
+            if cliente_objetivo and cliente_objetivo != user:
+                raise serializers.ValidationError(
+                    {"cliente": "No puede crear pedidos para otro usuario."}
+                )
+            if not cliente_objetivo:
+                attrs["cliente"] = user
+        return attrs
     
     def validate_tipo(self, value):
         """Validar que el tipo de pedido sea apropiado para la entidad del usuario"""
@@ -104,7 +120,7 @@ class PedidoCreateSerializer(serializers.ModelSerializer):
         else:
             validated_data['estado'] = 'PENDIENTE'
         
-        # Si es un cliente/socio creando su propio pedido
+        # Si no viene cliente explícito (caso no admin), se usa el usuario actual.
         if not validated_data.get('cliente'):
             validated_data['cliente'] = request.user
         

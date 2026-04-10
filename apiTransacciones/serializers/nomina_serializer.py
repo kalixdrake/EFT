@@ -7,8 +7,8 @@ class NominaSerializer(serializers.ModelSerializer):
     
     empleado_nombre = serializers.CharField(source='empleado.get_full_name', read_only=True)
     aprobado_por_nombre = serializers.CharField(source='aprobado_por.get_full_name', read_only=True, allow_null=True)
-    salario_neto = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, source='salario_neto')
-    esta_vencido = serializers.BooleanField(read_only=True, source='esta_vencido')
+    salario_neto = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    esta_vencido = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Nomina
