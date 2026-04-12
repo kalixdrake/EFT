@@ -10,6 +10,7 @@ class InteraccionIASerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'fecha',
+            'usuario',
             'usuario_prompt',
             'contexto',
             'respuesta_ia',
@@ -19,7 +20,7 @@ class InteraccionIASerializer(serializers.ModelSerializer):
             'archivo_url',
             'nombre_archivo_original'
         ]
-        read_only_fields = ['id', 'fecha', 'contexto', 'respuesta_ia', 'acciones_ejecutadas']
+        read_only_fields = ['id', 'fecha', 'usuario', 'contexto', 'respuesta_ia', 'acciones_ejecutadas']
 
     def get_archivo_url(self, obj):
         """Retorna la URL completa del archivo si existe"""
@@ -40,6 +41,7 @@ class InteraccionIAListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'fecha',
+            'usuario',
             'usuario_prompt',
             'respuesta_ia',
             'exitosa',

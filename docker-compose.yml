@@ -27,7 +27,7 @@ services:
   # Servicio de Django
   web:
     build:
-      context: .
+      context: ./backend
       dockerfile: dockerfile
     container_name: eft_django
     restart: unless-stopped
@@ -55,7 +55,7 @@ services:
       - DATABASE_PORT=5432
       - USE_SQLITE=${USE_SQLITE:-False}
     volumes:
-      - .:/app
+      - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:

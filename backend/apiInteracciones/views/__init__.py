@@ -1,1 +1,1 @@
-from .interaccion_view import chat_view, chat_api
+from .interaccion_view import InteraccionChatAPIView, chat_api, chat_view

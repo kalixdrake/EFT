@@ -5,6 +5,8 @@ from collections import defaultdict
 from django.contrib.auth.models import Group
 from rest_framework import permissions
 
+from apiUsuarios.models import Cliente, Empleado, Socio, Usuario
+
 from .rbac_contracts import Actions, Capability, FRONTEND_MENU_CATALOG, Resources, Roles, Scopes
 
 
@@ -152,6 +154,27 @@ RESOURCE_GRANTS = {
         (Roles.USUARIO_EXTERNO, Actions.CREATE, Scopes.OWN),
         (Roles.USUARIO_EXTERNO, Actions.UPDATE, Scopes.OWN),
     ],
+    Resources.INTERACCION: [
+        (Roles.SUPER_ADMIN, Actions.READ, Scopes.GLOBAL),
+        (Roles.SUPER_ADMIN, Actions.CREATE, Scopes.GLOBAL),
+        (Roles.ADMIN_GENERAL, Actions.READ, Scopes.COMPANY),
+        (Roles.ADMIN_GENERAL, Actions.CREATE, Scopes.COMPANY),
+        (Roles.AUDITOR, Actions.READ, Scopes.COMPANY),
+        (Roles.CONTABILIDAD, Actions.READ, Scopes.COMPANY),
+        (Roles.CONTABILIDAD, Actions.CREATE, Scopes.COMPANY),
+        (Roles.RRHH, Actions.READ, Scopes.COMPANY),
+        (Roles.RRHH, Actions.CREATE, Scopes.COMPANY),
+        (Roles.LOGISTICA, Actions.READ, Scopes.COMPANY),
+        (Roles.LOGISTICA, Actions.CREATE, Scopes.COMPANY),
+        (Roles.COMERCIAL, Actions.READ, Scopes.COMPANY),
+        (Roles.COMERCIAL, Actions.CREATE, Scopes.COMPANY),
+        (Roles.INVENTARIO, Actions.READ, Scopes.COMPANY),
+        (Roles.INVENTARIO, Actions.CREATE, Scopes.COMPANY),
+        (Roles.SOPORTE, Actions.READ, Scopes.COMPANY),
+        (Roles.SOPORTE, Actions.CREATE, Scopes.COMPANY),
+        (Roles.USUARIO_EXTERNO, Actions.READ, Scopes.OWN),
+        (Roles.USUARIO_EXTERNO, Actions.CREATE, Scopes.OWN),
+    ],
 }
 
 SCOPE_ORDER = {
@@ -270,16 +293,34 @@ def _resolve_owner_filter(model, user):
         if owner_field not in model_field_names:
             continue
 
+        model_field = model._meta.get_field(owner_field)
+        related_model = getattr(getattr(model_field, "remote_field", None), "model", None)
+
         if owner_field == "cliente":
-            if hasattr(user, "cliente"):
+            if related_model is Cliente:
+                if hasattr(user, "cliente"):
+                    return {"cliente": user.cliente}
+            elif related_model is Usuario:
+                return {"cliente": user}
+            elif hasattr(user, "cliente"):
                 return {"cliente": user.cliente}
             continue
         if owner_field == "empleado":
-            if hasattr(user, "empleado"):
+            if related_model is Empleado:
+                if hasattr(user, "empleado"):
+                    return {"empleado": user.empleado}
+            elif related_model is Usuario:
+                return {"empleado": user}
+            elif hasattr(user, "empleado"):
                 return {"empleado": user.empleado}
             continue
         if owner_field == "socio":
-            if hasattr(user, "socio"):
+            if related_model is Socio:
+                if hasattr(user, "socio"):
+                    return {"socio": user.socio}
+            elif related_model is Usuario:
+                return {"socio": user}
+            elif hasattr(user, "socio"):
                 return {"socio": user.socio}
             continue
         return {owner_field: user}
@@ -307,11 +348,11 @@ def has_object_scope(user, obj, scope: str) -> bool:
             continue
         owner_value = getattr(obj, owner_field)
         if owner_field == "cliente":
-            return hasattr(user, "cliente") and owner_value == user.cliente
+            return owner_value == user or (hasattr(user, "cliente") and owner_value == user.cliente)
         if owner_field == "empleado":
-            return hasattr(user, "empleado") and owner_value == user.empleado
+            return owner_value == user or (hasattr(user, "empleado") and owner_value == user.empleado)
         if owner_field == "socio":
-            return hasattr(user, "socio") and owner_value == user.socio
+            return owner_value == user or (hasattr(user, "socio") and owner_value == user.socio)
         return owner_value == user
     return False
 
@@ -321,8 +362,11 @@ class RoleScopePermission(permissions.BasePermission):
 
     def _resolve_action(self, request, view):
         action_map = getattr(view, "rbac_action_map", {})
-        if view.action in action_map:
-            return action_map[view.action]
+        view_action = getattr(view, "action", None)
+        if view_action in action_map:
+            return action_map[view_action]
+        if request.method.lower() in action_map:
+            return action_map[request.method.lower()]
         return METHOD_ACTION_MAP.get(request.method, Actions.READ)
 
     def has_permission(self, request, view):

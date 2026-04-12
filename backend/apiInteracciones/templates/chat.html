@@ -108,7 +108,7 @@
                     formData.append("archivo", selectedFile);
                 }
 
-                const response = await fetch('/chat/api/', {
+                const response = await fetch('/api/interacciones/chat/', {
                     method: 'POST',
                     headers: {'X-CSRFToken': getCookie('csrftoken')},
                     body: formData

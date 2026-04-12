@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/', include('apiCuentas.urls')),
     path('api/', include('apiTransacciones.urls')),
 
+    path('api/interacciones/', include('apiInteracciones.urls')),
     path('chat/', include('apiInteracciones.urls')),
 
     # Endpoint para generar el esquema OpenAPI en crudo (JSON)

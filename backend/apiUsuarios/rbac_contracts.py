@@ -50,6 +50,7 @@ class Resources:
     BANCO = "banco"
     CUENTA = "cuenta"
     AUDITORIA = "auditoria"
+    INTERACCION = "interaccion"
 
 
 @dataclass(frozen=True)

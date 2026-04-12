@@ -12,9 +12,9 @@ Esta guía te ayudará a ejecutar la aplicación Django EFT con PostgreSQL usand
 
 La aplicación está dividida en los siguientes servicios:
 
-### Desarrollo
+### Desarrollo (backend desacoplado)
 - **db**: PostgreSQL 16 (Alpine Linux)
-- **web**: Django con servidor de desarrollo
+- **web**: Django API (consumida por frontend web y app Flutter vía HTTP)
 
 ### Producción
 - **db**: PostgreSQL 16 (Alpine Linux)
@@ -71,10 +71,35 @@ docker compose exec web python manage.py changepassword admin
 
 ### 5. Acceder a la Aplicación
 
-- **Aplicación**: http://localhost:8000
+- **API Backend**: http://localhost:8000
 - **Admin Django**: http://localhost:8000/admin/
 - **API Schema**: http://localhost:8000/api/schema/
-- **Swagger UI**: http://localhost:8000/api/schema/swagger-ui/
+- **Swagger UI**: http://localhost:8000/api/docs/
+
+### 6. Chat IA seguro (autenticado + RBAC)
+
+- Endpoint nuevo: `POST /api/interacciones/chat/`
+- Requiere sesión iniciada (si no, responde `401`)
+- Requiere capability RBAC `interaccion:create` (si no, responde `403`)
+- El backend limita el contexto de IA a recursos permitidos por capability (no depende solo del prompt)
+
+## 🔌 Integración frontend/web y móvil (Flutter)
+
+Para mantener frontend y móvil livianos, deja toda la lógica de negocio en este backend y consume por requests HTTP.
+
+Configura en `.env.local` los orígenes permitidos de tus apps cliente:
+
+```bash
+DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
+CORS_ALLOW_CREDENTIALS=True
+```
+
+Si tu frontend/móvil usa sesión/cookies, mantén `CORS_ALLOW_CREDENTIALS=True` y agrega sus hosts también en:
+
+```bash
+ALLOWED_HOSTS=localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
 
 ## 🔧 Comandos Útiles
 

@@ -1,9 +1,16 @@
 from django.db import models
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
+from apiUsuarios.models import Usuario
 
 class InteraccionIA(models.Model):
     fecha = models.DateTimeField(default=timezone.now)
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name="interacciones_ia",
+        help_text="Usuario autenticado que realizó la interacción",
+    )
     usuario_prompt = models.TextField(help_text="Petición del usuario")
     contexto = models.TextField(help_text="Contexto RAG enviado a la IA")
     respuesta_ia = models.TextField(help_text="Respuesta cruda de la IA")
@@ -27,8 +34,7 @@ class InteraccionIA(models.Model):
     )
 
     def __str__(self):
-        return f"Interacción {self.id} - {self.fecha.strftime('%Y-%m-%d %H:%M')}"
+        return f"Interacción {self.id} - {self.usuario_id} - {self.fecha.strftime('%Y-%m-%d %H:%M')}"
     
     class Meta:
         ordering = ['-fecha']
-
