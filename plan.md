@@ -12,6 +12,7 @@ Objetivo: Autenticación base, gestión del personal y perfiles operativos.
  Implementar lógica de "desactivación" (Soft delete) con flag is_active temporal.
  Configurar serializadores (Django Bolt) para retornos de perfiles parciales (list y detail).
  Configurar Autenticación (JWT sugerido) adaptándolo al estándar asíncrono.
+ 
 2. Fase Catálogo de Productos e Inventario (Stock y Costos)
 Objetivo: Manejar ítems, precios, costos, impuestos y campañas promocionales.
 
