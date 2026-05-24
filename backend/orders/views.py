@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from locations.models import Address
 from orders.models import Cart, CartItem, Order, OrderItem
 from orders.serializers import (
     AddCartItemSerializer,
@@ -85,7 +86,11 @@ class OrderListAPIView(generics.ListAPIView):
     serializer_class = OrderListSerializer
 
     def get_queryset(self):
-        queryset = Order.objects.select_related('user').annotate(items_total=Count('items')).prefetch_related('items')
+        queryset = (
+            Order.objects.select_related('user', 'address__municipality__department')
+            .annotate(items_total=Count('items'))
+            .prefetch_related('items')
+        )
         user = self.request.user
         if not getattr(user, 'is_privileged', False) and not user.is_staff and not user.is_superuser:
             queryset = queryset.filter(user=user)
@@ -97,7 +102,11 @@ class OrderDetailAPIView(generics.RetrieveAPIView):
     serializer_class = OrderDetailSerializer
 
     def get_queryset(self):
-        queryset = Order.objects.select_related('user').prefetch_related('items__product').annotate(items_total=Count('items'))
+        queryset = (
+            Order.objects.select_related('user', 'address__municipality__department')
+            .prefetch_related('items__product')
+            .annotate(items_total=Count('items'))
+        )
         user = self.request.user
         if not getattr(user, 'is_privileged', False) and not user.is_staff and not user.is_superuser:
             queryset = queryset.filter(user=user)
@@ -108,8 +117,12 @@ class OrderCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = CreateOrderSerializer(data=request.data)
+        serializer = CreateOrderSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
+        address = Address.objects.select_related('municipality__department').get(
+            pk=serializer.validated_data['address_id'],
+            user=request.user,
+        )
 
         with transaction.atomic():
             cart, _ = Cart.objects.select_for_update().get_or_create(user=request.user)
@@ -122,7 +135,7 @@ class OrderCreateAPIView(APIView):
                 if item.quantity > item.product.stock:
                     return Response({'detail': f'Insufficient stock for {item.product.name}.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            order = Order.objects.create(user=request.user, **serializer.validated_data)
+            order = Order.objects.create(user=request.user, address=address)
             total = Decimal('0.00')
             for item in items:
                 Product.objects.filter(pk=item.product_id).update(stock=F('stock') - item.quantity)
@@ -139,5 +152,10 @@ class OrderCreateAPIView(APIView):
             order.save(update_fields=['total'])
             cart.items.all().delete()
 
-        order = Order.objects.select_related('user').prefetch_related('items__product').annotate(items_total=Count('items')).get(pk=order.pk)
+        order = (
+            Order.objects.select_related('user', 'address__municipality__department')
+            .prefetch_related('items__product')
+            .annotate(items_total=Count('items'))
+            .get(pk=order.pk)
+        )
         return Response(OrderDetailSerializer(order).data, status=status.HTTP_201_CREATED)

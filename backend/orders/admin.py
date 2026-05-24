@@ -33,10 +33,11 @@ class CartItemAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'status', 'total', 'shipping_city', 'created_at')
-    list_filter = ('status', 'shipping_department', 'created_at')
-    search_fields = ('user__email', 'user__username', 'shipping_city', 'shipping_address')
-    list_select_related = ('user',)
+    list_display = ('order_number', 'id', 'user', 'status', 'total', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('order_number', 'user__email', 'user__username', 'address__line', 'address__municipality__name')
+    list_select_related = ('user', 'address', 'address__municipality', 'address__municipality__department')
+    autocomplete_fields = ('user', 'address')
     inlines = [OrderItemInline]
 
 

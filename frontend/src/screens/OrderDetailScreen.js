@@ -34,7 +34,7 @@ export default function OrderDetailScreen({ route }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Pedido #{order.id}</Text>
+        <Text style={styles.title}>Pedido {order.order_number}</Text>
         <View style={styles.statusBadge}>
           <Text style={styles.statusText}>{getOrderStatusLabel(order.status)}</Text>
         </View>
@@ -44,9 +44,9 @@ export default function OrderDetailScreen({ route }) {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Envío</Text>
-        <Text style={styles.text}>{order.shipping_address}</Text>
+        <Text style={styles.text}>{order.address?.line}</Text>
         <Text style={styles.text}>
-          {order.shipping_city}, {order.shipping_department}
+          {order.address?.municipality?.name}, {order.address?.municipality?.department?.name}
         </Text>
       </View>
 

@@ -3,6 +3,7 @@ from django.test import TransactionTestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.test import APIClient
 
+from locations.models import Address, Department, Municipality
 from orders.models import Cart, CartItem, Order, OrderItem
 from products.models import Category, Product
 
@@ -34,29 +35,47 @@ class OrderAPITests(TransactionTestCase):
         )
         self.cart = Cart.objects.create(user=self.user)
         CartItem.objects.create(cart=self.cart, product=self.product, quantity=2)
+        department = Department.objects.create(name='Antioquia')
+        municipality = Municipality.objects.create(department=department, name='Medellin')
+        self.address = Address.objects.create(
+            user=self.user,
+            municipality=municipality,
+            line='Street 123',
+            is_default=True,
+        )
+        other_department = Department.objects.create(name='Cundinamarca')
+        other_municipality = Municipality.objects.create(department=other_department, name='Bogota')
+        self.other_address = Address.objects.create(
+            user=self.other,
+            municipality=other_municipality,
+            line='Other street',
+        )
 
     def test_create_order_from_cart(self):
-        response = self.client.post('/api/orders/create/', {
-            'shipping_address': 'Street 123',
-            'shipping_city': 'Medellin',
-            'shipping_department': 'Antioquia',
-        }, format='json')
+        response = self.client.post('/api/orders/create/', {'address_id': self.address.pk}, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['total'], '80.00')
+        self.assertRegex(response.data['order_number'], r'^\d{8}-\d+$')
+        self.assertEqual(response.data['address']['line'], 'Street 123')
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(OrderItem.objects.count(), 1)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock, 2)
 
+    def test_create_order_rejects_foreign_address(self):
+        response = self.client.post('/api/orders/create/', {'address_id': self.other_address.pk}, format='json')
+        self.assertEqual(response.status_code, 400)
+
     def test_list_orders_only_returns_owner_orders(self):
-        Order.objects.create(user=self.other, status='pending', total='10.00', shipping_address='x', shipping_city='Bogota', shipping_department='Cundinamarca')
+        Order.objects.create(user=self.other, address=self.other_address, status='pending', total='10.00')
         response = self.client.get('/api/orders/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [])
 
     def test_order_detail_returns_items(self):
-        order = Order.objects.create(user=self.user, status='pending', total='80.00', shipping_address='Street 123', shipping_city='Medellin', shipping_department='Antioquia')
+        order = Order.objects.create(user=self.user, address=self.address, status='pending', total='80.00')
         OrderItem.objects.create(order=order, product=self.product, product_name=self.product.name, price=self.product.price, quantity=2)
         response = self.client.get(f'/api/orders/{order.pk}/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['items'][0]['product_name'], 'Cap')
+        self.assertEqual(response.data['order_number'], order.order_number)

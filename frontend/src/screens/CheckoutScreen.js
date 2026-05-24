@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,41 +8,74 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import ErrorView from '../components/ErrorView';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { fetchAddresses, setSelectedAddressId } from '../store/addressSlice';
 import { createOrder } from '../store/orderSlice';
 import { formatPrice } from '../utils/format';
 import { colors, spacing } from '../utils/theme';
 
+function formatAddress(address) {
+  const municipality = address.municipality;
+  return `${address.line} — ${municipality.name}, ${municipality.department.name}`;
+}
+
 export default function CheckoutScreen({ navigation }) {
   const dispatch = useDispatch();
   const { total, items } = useSelector((state) => state.cart);
-  const { loading } = useSelector((state) => state.orders);
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [department, setDepartment] = useState('');
+  const { loading: orderLoading } = useSelector((state) => state.orders);
+  const { addresses, selectedAddressId, loading, error } = useSelector((state) => state.address);
+
+  const loadAddresses = useCallback(() => {
+    dispatch(fetchAddresses());
+  }, [dispatch]);
+
+  useEffect(() => {
+    loadAddresses();
+  }, [loadAddresses]);
+
+  useEffect(() => {
+    if (!selectedAddressId && addresses.length > 0) {
+      const defaultAddress = addresses.find((item) => item.is_default) || addresses[0];
+      if (defaultAddress) {
+        dispatch(setSelectedAddressId(defaultAddress.id));
+      }
+    }
+  }, [addresses, dispatch, selectedAddressId]);
+
+  const selectedAddress = useMemo(
+    () => addresses.find((address) => address.id === selectedAddressId),
+    [addresses, selectedAddressId],
+  );
+
+  const handleAddAddress = () => {
+    navigation.navigate('AddressForm', { source: 'checkout' });
+  };
 
   const handleConfirm = async () => {
-    if (!address.trim() || !city.trim() || !department.trim()) {
-      Alert.alert('Datos incompletos', 'Completa todos los campos de envío.');
+    if (!selectedAddressId) {
+      Alert.alert('Datos incompletos', 'Selecciona o crea una dirección de envío.');
       return;
     }
 
     try {
-      const order = await dispatch(
-        createOrder({
-          shipping_address: address.trim(),
-          shipping_city: city.trim(),
-          shipping_department: department.trim(),
-        }),
-      ).unwrap();
+      const order = await dispatch(createOrder({ address_id: selectedAddressId })).unwrap();
       navigation.replace('OrderDetail', { orderId: order.id });
     } catch (err) {
       Alert.alert('Error', String(err));
     }
   };
+
+  if (loading && addresses.length === 0) {
+    return <LoadingSpinner />;
+  }
+
+  if (error && addresses.length === 0) {
+    return <ErrorView message={error} onRetry={loadAddresses} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -55,31 +88,68 @@ export default function CheckoutScreen({ navigation }) {
           {items.length} producto(s) · Total: {formatPrice(total)}
         </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Dirección"
-          value={address}
-          onChangeText={setAddress}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Ciudad"
-          value={city}
-          onChangeText={setCity}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Departamento"
-          value={department}
-          onChangeText={setDepartment}
-        />
+        {addresses.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Direcciones guardadas</Text>
+            {addresses.map((address) => (
+              <Pressable
+                key={address.id}
+                style={[styles.addressCard, selectedAddressId === address.id && styles.addressSelected]}
+                onPress={() => dispatch(setSelectedAddressId(address.id))}
+              >
+                <View style={styles.addressRow}>
+                  <View
+                    style={[
+                      styles.radioOuter,
+                      selectedAddressId === address.id && styles.radioOuterSelected,
+                    ]}
+                  >
+                    {selectedAddressId === address.id ? <View style={styles.radioInner} /> : null}
+                  </View>
+                  <View style={styles.addressInfo}>
+                    <View style={styles.addressHeader}>
+                      <Text style={styles.addressText}>{formatAddress(address)}</Text>
+                      {address.is_default ? (
+                        <View style={styles.defaultBadge}>
+                          <Text style={styles.defaultBadgeText}>Predeterminada</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {address.label ? <Text style={styles.addressLabel}>{address.label}</Text> : null}
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyAddress}>
+            <Text style={styles.emptyTitle}>No tienes direcciones guardadas.</Text>
+            <Pressable style={styles.addAddressButton} onPress={handleAddAddress}>
+              <Text style={styles.addAddressText}>➕ Agregar dirección</Text>
+            </Pressable>
+          </View>
+        )}
+
+        <Pressable style={styles.linkButton} onPress={handleAddAddress}>
+          <Text style={styles.linkButtonText}>➕ Agregar nueva para este pedido</Text>
+        </Pressable>
+
+        {selectedAddress ? (
+          <View style={styles.summaryCard}>
+            <Text style={styles.sectionTitle}>Dirección seleccionada</Text>
+            <Text style={styles.summaryText}>{formatAddress(selectedAddress)}</Text>
+            {selectedAddress.label ? (
+              <Text style={styles.summaryLabel}>{selectedAddress.label}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.button, (orderLoading || !selectedAddressId) && styles.buttonDisabled]}
           onPress={handleConfirm}
-          disabled={loading}
+          disabled={orderLoading || !selectedAddressId}
         >
-          {loading ? (
+          {orderLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.buttonText}>Confirmar pedido</Text>
@@ -109,15 +179,129 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.lg,
   },
-  input: {
+  addressCard: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontSize: 16,
+    padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  addressSelected: {
+    borderColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
+  section: {
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  radioOuterSelected: {
+    borderColor: colors.primary,
+  },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  addressInfo: {
+    flex: 1,
+  },
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  addressText: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  addressLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  defaultBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    color: colors.success,
+    fontWeight: '700',
+  },
+  linkButton: {
+    marginBottom: spacing.md,
+  },
+  linkButtonText: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  emptyAddress: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  addAddressButton: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+  },
+  addAddressText: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
   button: {
     backgroundColor: colors.primary,

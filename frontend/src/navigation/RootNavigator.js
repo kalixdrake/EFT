@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useDispatch, useSelector } from 'react-redux';
+import AddressFormScreen from '../screens/AddressFormScreen';
 import AuthScreen from '../screens/AuthScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
@@ -54,6 +55,13 @@ function AuthenticatedStack() {
         name="OrderDetail"
         component={OrderDetailScreen}
         options={{ title: 'Detalle del pedido' }}
+      />
+      <Stack.Screen
+        name="AddressForm"
+        component={AddressFormScreen}
+        options={({ route }) => ({
+          title: route.params?.addressId ? 'Editar dirección' : 'Nueva dirección',
+        })}
       />
     </Stack.Navigator>
   );

@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # Apps propias
     'users',
+    'locations',
     'products',
     'orders',
     'payments',

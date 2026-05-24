@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from locations.models import Address
+from locations.serializers import AddressSerializer
 from orders.models import Order, OrderItem
 
 
@@ -16,10 +18,11 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderListSerializer(serializers.ModelSerializer):
     item_count = serializers.SerializerMethodField()
+    address = AddressSerializer(read_only=True)
 
     class Meta:
         model = Order
-        fields = ('id', 'status', 'total', 'created_at', 'shipping_city', 'item_count')
+        fields = ('id', 'order_number', 'status', 'total', 'created_at', 'address', 'item_count')
 
     def get_item_count(self, obj):
         return getattr(obj, 'items_total', obj.items.count())
@@ -27,18 +30,22 @@ class OrderListSerializer(serializers.ModelSerializer):
 
 class OrderDetailSerializer(OrderListSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    shipping_address = serializers.CharField(read_only=True)
-    shipping_department = serializers.CharField(read_only=True)
     user_email = serializers.SerializerMethodField()
 
     class Meta(OrderListSerializer.Meta):
-        fields = OrderListSerializer.Meta.fields + ('items', 'shipping_address', 'shipping_department', 'user_email')
+        fields = OrderListSerializer.Meta.fields + ('items', 'user_email')
 
     def get_user_email(self, obj):
         return obj.user.email
 
 
 class CreateOrderSerializer(serializers.Serializer):
-    shipping_address = serializers.CharField()
-    shipping_city = serializers.CharField()
-    shipping_department = serializers.CharField()
+    address_id = serializers.IntegerField()
+
+    def validate_address_id(self, value):
+        request = self.context.get('request')
+        if request is None:
+            raise serializers.ValidationError('Request context is required.')
+        if not Address.objects.filter(pk=value, user=request.user).exists():
+            raise serializers.ValidationError('Address not found.')
+        return value

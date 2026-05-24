@@ -25,9 +25,25 @@ export const cartApi = {
     apiClient.delete(`/api/cart/remove/${itemId}/`).then((r) => r.data),
 };
 
+export const locationsApi = {
+  departments: () => apiClient.get('/api/locations/departments/').then((r) => r.data),
+  municipalities: (departmentId) =>
+    apiClient
+      .get('/api/locations/municipalities/', { params: { department: departmentId } })
+      .then((r) => r.data),
+  addresses: () => apiClient.get('/api/locations/addresses/').then((r) => r.data),
+  createAddress: (payload) =>
+    apiClient.post('/api/locations/addresses/', payload).then((r) => r.data),
+  updateAddress: (id, payload) =>
+    apiClient.put(`/api/locations/addresses/${id}/`, payload).then((r) => r.data),
+  deleteAddress: (id) => apiClient.delete(`/api/locations/addresses/${id}/`).then((r) => r.data),
+  setDefaultAddress: (id) =>
+    apiClient.put(`/api/locations/addresses/${id}/`, { is_default: true }).then((r) => r.data),
+};
+
 export const ordersApi = {
   list: () => apiClient.get('/api/orders/').then((r) => r.data),
   detail: (id) => apiClient.get(`/api/orders/${id}/`).then((r) => r.data),
-  create: (shipping) =>
-    apiClient.post('/api/orders/create/', shipping).then((r) => r.data),
+  create: ({ address_id }) =>
+    apiClient.post('/api/orders/create/', { address_id }).then((r) => r.data),
 };

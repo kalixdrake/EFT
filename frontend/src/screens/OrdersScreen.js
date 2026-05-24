@@ -43,7 +43,7 @@ export default function OrdersScreen({ navigation }) {
             onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}
           >
             <View style={styles.row}>
-              <Text style={styles.orderId}>Pedido #{item.id}</Text>
+              <Text style={styles.orderId}>Pedido {item.order_number}</Text>
               <Text style={styles.status}>{getOrderStatusLabel(item.status)}</Text>
             </View>
             <Text style={styles.date}>{formatDate(item.created_at)}</Text>
@@ -51,7 +51,9 @@ export default function OrdersScreen({ navigation }) {
               <Text style={styles.meta}>{item.item_count} artículo(s)</Text>
               <Text style={styles.total}>{formatPrice(item.total)}</Text>
             </View>
-            <Text style={styles.city}>{item.shipping_city}</Text>
+            <Text style={styles.city}>
+              {item.address?.municipality?.name}, {item.address?.municipality?.department?.name}
+            </Text>
           </Pressable>
         )}
       />
