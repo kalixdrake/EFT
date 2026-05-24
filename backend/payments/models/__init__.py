@@ -1,1 +1,1 @@
-from .payment import Payment
+from .payment import Payment, PaymentLog

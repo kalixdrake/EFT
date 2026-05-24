@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 from pathlib import Path
 import environ  # necesitas instalar django-environ
+import sys
 
 # Inicializa environ
 env = environ.Env(
@@ -123,6 +124,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),
+    'DEFAULT_THROTTLE_RATES': {
+        'bold_webhook': '100/min',
+    },
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -175,3 +179,31 @@ SIMPLE_JWT = {
 
 # CORS (permitir todo en desarrollo)
 CORS_ALLOW_ALL_ORIGINS = True
+
+BOLD_INTEGRITY_SECRET = env('BOLD_INTEGRITY_SECRET', default='')
+BOLD_PUBLIC_KEY = env('BOLD_PUBLIC_KEY', default='')
+BOLD_REDIRECT_URL = env('BOLD_REDIRECT_URL', default='')
+BOLD_CHECKOUT_URL = env('BOLD_CHECKOUT_URL', default='')
+
+SKYDROPX_API_KEY = env('SKYDROPX_API_KEY', default='')
+SKYDROPX_API_BASE_URL = env('SKYDROPX_API_BASE_URL', default='https://api.skydropx.com/v1')
+SKYDROPX_ORIGIN_POSTAL_CODE = env('SKYDROPX_ORIGIN_POSTAL_CODE', default='')
+SHIPPING_CARRIERS = env.list('SHIPPING_CARRIERS', default=[])
+SHIPPING_ORIGIN_NAME = env('SHIPPING_ORIGIN_NAME', default='')
+SHIPPING_ORIGIN_ADDRESS = env('SHIPPING_ORIGIN_ADDRESS', default='')
+SHIPPING_ORIGIN_CITY = env('SHIPPING_ORIGIN_CITY', default='')
+SHIPPING_ORIGIN_STATE = env('SHIPPING_ORIGIN_STATE', default='')
+SHIPPING_ORIGIN_COUNTRY = env('SHIPPING_ORIGIN_COUNTRY', default='CO')
+SHIPPING_ORIGIN_PHONE = env('SHIPPING_ORIGIN_PHONE', default='')
+SHIPPING_ORIGIN_EMAIL = env('SHIPPING_ORIGIN_EMAIL', default='')
+SHIPPING_DESTINATION_COUNTRY = env('SHIPPING_DESTINATION_COUNTRY', default='CO')
+
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
+CELERY_TASK_EAGER_PROPAGATES = env.bool('CELERY_TASK_EAGER_PROPAGATES', default=True)
+CELERY_TIMEZONE = TIME_ZONE
+
+if 'test' in sys.argv:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True

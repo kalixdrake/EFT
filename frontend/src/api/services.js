@@ -44,6 +44,13 @@ export const locationsApi = {
 export const ordersApi = {
   list: () => apiClient.get('/api/orders/').then((r) => r.data),
   detail: (id) => apiClient.get(`/api/orders/${id}/`).then((r) => r.data),
-  create: ({ address_id }) =>
-    apiClient.post('/api/orders/create/', { address_id }).then((r) => r.data),
+  create: ({ address_id, shipping_quote_id, payment_method, notes }) =>
+    apiClient
+      .post('/api/orders/create/', { address_id, shipping_quote_id, payment_method, notes })
+      .then((r) => r.data),
+  tracking: (id) => apiClient.get(`/api/orders/${id}/tracking/`).then((r) => r.data),
+};
+
+export const shippingApi = {
+  quote: (payload) => apiClient.post('/api/shipping/quote/', payload).then((r) => r.data),
 };

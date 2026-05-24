@@ -77,6 +77,7 @@ export default function AddressFormScreen({ navigation, route }) {
   );
 
   const [line, setLine] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [labelType, setLabelType] = useState('Casa');
   const [customLabel, setCustomLabel] = useState('');
   const [departmentId, setDepartmentId] = useState(null);
@@ -141,6 +142,7 @@ export default function AddressFormScreen({ navigation, route }) {
   useEffect(() => {
     if (!existingAddress) return;
     setLine(existingAddress.line || '');
+    setPostalCode(existingAddress.postal_code || '');
     if (existingAddress.label && LABEL_OPTIONS.includes(existingAddress.label)) {
       setLabelType(existingAddress.label);
       setCustomLabel('');
@@ -178,14 +180,18 @@ export default function AddressFormScreen({ navigation, route }) {
   const labelValue = labelType === 'Otro' ? customLabel.trim() : labelType;
 
   const handleSave = async () => {
-    if (!labelValue || !line.trim() || !departmentId || !municipalityId) {
-      Alert.alert('Datos incompletos', 'Completa la etiqueta, dirección, departamento y municipio.');
+    if (!labelValue || !line.trim() || !postalCode.trim() || !departmentId || !municipalityId) {
+      Alert.alert(
+        'Datos incompletos',
+        'Completa la etiqueta, dirección, código postal, departamento y municipio.',
+      );
       return;
     }
 
     const payload = {
       label: labelValue,
       line: line.trim(),
+      postal_code: postalCode.trim(),
       municipality_id: municipalityId,
       is_default: isDefault,
     };
@@ -243,6 +249,13 @@ export default function AddressFormScreen({ navigation, route }) {
           value={line}
           onChangeText={setLine}
           autoCapitalize="words"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Código postal"
+          value={postalCode}
+          onChangeText={setPostalCode}
+          keyboardType="number-pad"
         />
 
         <Text style={styles.fieldLabel}>Departamento</Text>

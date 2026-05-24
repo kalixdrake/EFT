@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from locations.models import Address, Department, Municipality
 from orders.models import Cart, CartItem, Order, OrderItem
+from shipping.models import ShippingQuote
 from products.models import Category, Product
 
 
@@ -41,6 +42,7 @@ class OrderAPITests(TransactionTestCase):
             user=self.user,
             municipality=municipality,
             line='Street 123',
+            postal_code='050001',
             is_default=True,
         )
         other_department = Department.objects.create(name='Cundinamarca')
@@ -49,12 +51,31 @@ class OrderAPITests(TransactionTestCase):
             user=self.other,
             municipality=other_municipality,
             line='Other street',
+            postal_code='110111',
+        )
+        self.quote = ShippingQuote.objects.create(
+            user=self.user,
+            carrier='DHL',
+            service='Ground',
+            service_code='GROUND',
+            estimated_days=3,
+            cost_cop='20.00',
+            destination_city='Medellin',
+            destination_postal_code='050001',
         )
 
     def test_create_order_from_cart(self):
-        response = self.client.post('/api/orders/create/', {'address_id': self.address.pk}, format='json')
+        response = self.client.post(
+            '/api/orders/create/',
+            {
+                'address_id': self.address.pk,
+                'shipping_quote_id': str(self.quote.quote_id),
+                'payment_method': 'bold',
+            },
+            format='json',
+        )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['total'], '80.00')
+        self.assertEqual(response.data['total'], '100.00')
         self.assertRegex(response.data['order_number'], r'^\d{8}-\d+$')
         self.assertEqual(response.data['address']['line'], 'Street 123')
         self.assertEqual(Order.objects.count(), 1)
@@ -63,7 +84,15 @@ class OrderAPITests(TransactionTestCase):
         self.assertEqual(self.product.stock, 2)
 
     def test_create_order_rejects_foreign_address(self):
-        response = self.client.post('/api/orders/create/', {'address_id': self.other_address.pk}, format='json')
+        response = self.client.post(
+            '/api/orders/create/',
+            {
+                'address_id': self.other_address.pk,
+                'shipping_quote_id': str(self.quote.quote_id),
+                'payment_method': 'bold',
+            },
+            format='json',
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_list_orders_only_returns_owner_orders(self):

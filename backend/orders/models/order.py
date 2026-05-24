@@ -8,15 +8,34 @@ from django.utils import timezone
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
+        PENDING_COD = 'pending_cod', 'Pending COD'
         CONFIRMED = 'confirmed', 'Confirmed'
         SHIPPED = 'shipped', 'Shipped'
         DELIVERED = 'delivered', 'Delivered'
         CANCELLED = 'cancelled', 'Cancelled'
 
+    class PaymentMethod(models.TextChoices):
+        BOLD = 'bold', 'Bold'
+        COD = 'cod', 'COD'
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='orders', on_delete=models.CASCADE)
     address = models.ForeignKey('locations.Address', related_name='orders', on_delete=models.PROTECT)
+    shipping_quote = models.ForeignKey(
+        'shipping.ShippingQuote',
+        related_name='orders',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     order_number = models.CharField(max_length=32, unique=True, editable=False, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    shipping_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    shipping_cost_before_credit = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    shipping_credit_applied = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    is_free_shipping = models.BooleanField(default=False)
+    shipping_method = models.CharField(max_length=120, blank=True)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.BOLD)
+    notes = models.TextField(blank=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

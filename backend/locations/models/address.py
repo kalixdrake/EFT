@@ -8,6 +8,7 @@ class Address(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='addresses', on_delete=models.CASCADE)
     municipality = models.ForeignKey(Municipality, related_name='addresses', on_delete=models.PROTECT)
     line = models.CharField(max_length=255)
+    postal_code = models.CharField(max_length=20, blank=True)
     label = models.CharField(max_length=50, blank=True)
     is_default = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -22,6 +22,7 @@ export function formatDate(isoString) {
 export function getOrderStatusLabel(status) {
   const labels = {
     pending: 'Pendiente',
+    pending_cod: 'Pendiente (contraentrega)',
     confirmed: 'Confirmado',
     shipped: 'Enviado',
     delivered: 'Entregado',

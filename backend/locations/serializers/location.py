@@ -35,7 +35,7 @@ class AddressSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Address
-        fields = ('id', 'line', 'label', 'is_default', 'municipality', 'created_at', 'updated_at')
+        fields = ('id', 'line', 'postal_code', 'label', 'is_default', 'municipality', 'created_at', 'updated_at')
         read_only_fields = ('created_at', 'updated_at')
 
 
@@ -47,7 +47,7 @@ class AddressWriteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Address
-        fields = ('id', 'line', 'label', 'is_default', 'municipality_id')
+        fields = ('id', 'line', 'postal_code', 'label', 'is_default', 'municipality_id')
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user

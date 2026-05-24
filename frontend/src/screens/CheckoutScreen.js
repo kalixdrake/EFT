@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -11,8 +12,11 @@ import {
   View,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import BoldPaymentButton from '../components/BoldPaymentButton';
 import ErrorView from '../components/ErrorView';
 import LoadingSpinner from '../components/LoadingSpinner';
+import PaymentMethodSelector from '../components/PaymentMethodSelector';
+import ShippingSelector from '../components/ShippingSelector';
 import { fetchAddresses, setSelectedAddressId } from '../store/addressSlice';
 import { createOrder } from '../store/orderSlice';
 import { formatPrice } from '../utils/format';
@@ -28,6 +32,8 @@ export default function CheckoutScreen({ navigation }) {
   const { total, items } = useSelector((state) => state.cart);
   const { loading: orderLoading } = useSelector((state) => state.orders);
   const { addresses, selectedAddressId, loading, error } = useSelector((state) => state.address);
+  const [selectedQuote, setSelectedQuote] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('bold');
 
   const loadAddresses = useCallback(() => {
     dispatch(fetchAddresses());
@@ -51,6 +57,17 @@ export default function CheckoutScreen({ navigation }) {
     [addresses, selectedAddressId],
   );
 
+  const destination = useMemo(() => {
+    if (!selectedAddress) return null;
+    return {
+      city: selectedAddress.municipality?.name,
+      postalCode: selectedAddress.postal_code,
+    };
+  }, [selectedAddress]);
+
+  const shippingCost = selectedQuote ? Number(selectedQuote.cost_after_credit) : 0;
+  const totalWithShipping = total + shippingCost;
+
   const handleAddAddress = () => {
     navigation.navigate('AddressForm', { source: 'checkout' });
   };
@@ -60,9 +77,22 @@ export default function CheckoutScreen({ navigation }) {
       Alert.alert('Datos incompletos', 'Selecciona o crea una dirección de envío.');
       return;
     }
+    if (!selectedQuote) {
+      Alert.alert('Datos incompletos', 'Selecciona una opción de envío.');
+      return;
+    }
 
     try {
-      const order = await dispatch(createOrder({ address_id: selectedAddressId })).unwrap();
+      const order = await dispatch(
+        createOrder({
+          address_id: selectedAddressId,
+          shipping_quote_id: selectedQuote.quote_id,
+          payment_method: paymentMethod,
+        }),
+      ).unwrap();
+      if (paymentMethod === 'bold' && order.bold_data?.checkout_url) {
+        await Linking.openURL(order.bold_data.checkout_url);
+      }
       navigation.replace('OrderDetail', { orderId: order.id });
     } catch (err) {
       Alert.alert('Error', String(err));
@@ -85,7 +115,7 @@ export default function CheckoutScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Datos de envío</Text>
         <Text style={styles.subtitle}>
-          {items.length} producto(s) · Total: {formatPrice(total)}
+          {items.length} producto(s) · Subtotal: {formatPrice(total)}
         </Text>
 
         {addresses.length > 0 ? (
@@ -144,17 +174,57 @@ export default function CheckoutScreen({ navigation }) {
           </View>
         ) : null}
 
-        <Pressable
-          style={[styles.button, (orderLoading || !selectedAddressId) && styles.buttonDisabled]}
-          onPress={handleConfirm}
-          disabled={orderLoading || !selectedAddressId}
-        >
-          {orderLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Confirmar pedido</Text>
-          )}
-        </Pressable>
+        <ShippingSelector
+          cartItems={items}
+          destination={destination}
+          selectedQuoteId={selectedQuote?.quote_id}
+          onSelectShipping={setSelectedQuote}
+        />
+
+        <PaymentMethodSelector
+          selectedMethod={paymentMethod}
+          onSelectMethod={setPaymentMethod}
+        />
+
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionTitle}>Resumen</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>Subtotal</Text>
+            <Text style={styles.summaryText}>{formatPrice(total)}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>Envío</Text>
+            <Text style={styles.summaryText}>
+              {selectedQuote ? formatPrice(shippingCost) : '--'}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryTotalLabel}>Total</Text>
+            <Text style={styles.summaryTotalValue}>
+              {selectedQuote ? formatPrice(totalWithShipping) : '--'}
+            </Text>
+          </View>
+        </View>
+
+        {paymentMethod === 'bold' ? (
+          <BoldPaymentButton
+            loading={orderLoading}
+            disabled={!selectedAddressId || !selectedQuote}
+            onPress={handleConfirm}
+          />
+        ) : (
+          <Pressable
+            style={[styles.button, (orderLoading || !selectedAddressId || !selectedQuote) && styles.buttonDisabled]}
+            onPress={handleConfirm}
+            disabled={orderLoading || !selectedAddressId || !selectedQuote}
+          >
+            {orderLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Confirmar pedido</Text>
+            )}
+          </Pressable>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -297,6 +367,22 @@ const styles = StyleSheet.create({
   summaryText: {
     fontSize: 14,
     color: colors.text,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  summaryTotalLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  summaryTotalValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.primary,
   },
   summaryLabel: {
     fontSize: 12,

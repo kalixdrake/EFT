@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import ErrorView from '../components/ErrorView';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { ordersApi } from '../api/services';
 import { fetchOrderDetail } from '../store/orderSlice';
 import { formatDate, formatPrice, getOrderStatusLabel } from '../utils/format';
 import { colors, spacing } from '../utils/theme';
@@ -11,6 +12,8 @@ export default function OrderDetailScreen({ route }) {
   const { orderId } = route.params;
   const dispatch = useDispatch();
   const { currentOrder, loading, error } = useSelector((state) => state.orders);
+  const [tracking, setTracking] = useState(null);
+  const [trackingError, setTrackingError] = useState(null);
 
   const loadOrder = useCallback(() => {
     dispatch(fetchOrderDetail(orderId));
@@ -19,6 +22,26 @@ export default function OrderDetailScreen({ route }) {
   useEffect(() => {
     loadOrder();
   }, [loadOrder]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setTracking(null);
+    setTrackingError(null);
+    ordersApi
+      .tracking(orderId)
+      .then((data) => {
+        if (isMounted) setTracking(data);
+      })
+      .catch((err) => {
+        if (isMounted) {
+          const message = err.response?.data?.detail;
+          setTrackingError(message || null);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId]);
 
   if (loading && !currentOrder) {
     return <LoadingSpinner />;
@@ -48,6 +71,9 @@ export default function OrderDetailScreen({ route }) {
         <Text style={styles.text}>
           {order.address?.municipality?.name}, {order.address?.municipality?.department?.name}
         </Text>
+        {order.shipment?.tracking_number ? (
+          <Text style={styles.text}>Tracking: {order.shipment.tracking_number}</Text>
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -66,6 +92,35 @@ export default function OrderDetailScreen({ route }) {
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalValue}>{formatPrice(order.total)}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Pago</Text>
+        <Text style={styles.text}>Método: {order.payment_method}</Text>
+        {order.payment_status ? (
+          <Text style={styles.text}>Estado: {order.payment_status}</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Tracking</Text>
+        {tracking ? (
+          <>
+            <Text style={styles.text}>
+              {tracking.carrier} · {tracking.current_status}
+            </Text>
+            {tracking.events?.map((event, index) => (
+              <View key={index} style={styles.eventRow}>
+                <Text style={styles.eventText}>{event.timestamp || event.created_at}</Text>
+                <Text style={styles.eventText}>{event.status || event.description}</Text>
+              </View>
+            ))}
+          </>
+        ) : trackingError ? (
+          <Text style={styles.text}>{trackingError}</Text>
+        ) : (
+          <Text style={styles.text}>Sin eventos de tracking por ahora.</Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -150,6 +205,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
+  },
+  eventRow: {
+    marginTop: spacing.xs,
+  },
+  eventText: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   totalRow: {
     flexDirection: 'row',
