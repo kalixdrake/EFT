@@ -80,6 +80,10 @@ class BoldWebhookAPIView(APIView):
             PaymentLog.objects.create(payment=payment, event=event, payload=payload)
 
         if event in approved_events:
-            crear_guia_envio.delay(order.id)
+            try:
+                crear_guia_envio.delay(order.id)
+            except Exception:
+                # Task failures are handled internally (retries/logs); never block the 200 response
+                pass
 
         return Response({'status': 'received'})

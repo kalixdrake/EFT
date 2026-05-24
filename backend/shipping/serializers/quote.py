@@ -12,6 +12,18 @@ class ShippingQuoteRequestSerializer(serializers.Serializer):
     cart_items = ShippingQuoteItemSerializer(many=True)
     destination_city = serializers.CharField()
     destination_postal_code = serializers.CharField()
+    destination_area_level1 = serializers.CharField(
+        help_text='Departamento/estado de destino (ej. "Antioquia")',
+        required=False,
+        allow_blank=True,
+        default='',
+    )
+    destination_area_level3 = serializers.CharField(
+        help_text='Barrio/colonia de destino (opcional)',
+        required=False,
+        allow_blank=True,
+        default='',
+    )
 
     def validate_cart_items(self, value):
         if not value:

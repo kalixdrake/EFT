@@ -17,6 +17,8 @@ services:
       - .:/app
     ports:
       - "8000:8000"
+    env_file:
+      - ../.env
     environment:
       - DB_ENGINE=postgres
       - POSTGRES_DB=${POSTGRES_DB:-miproyecto}
@@ -26,6 +28,9 @@ services:
       - POSTGRES_PORT=5432
       - SECRET_KEY=${SECRET_KEY:-clave_temporal_no_segura}
       - DEBUG=True
+      - BOLD_INTEGRITY_SECRET=${LLAVE_SECRETA_BOLD_PRUEBA:-}
+      - BOLD_PUBLIC_KEY=${LLAVE_IDENTIDAD_BOLD_PRUEBA:-}
+      - SKYDROPX_API_KEY=${API_KEY_SKYDROPX_SANDBOX:-}
     depends_on:
       - db
 

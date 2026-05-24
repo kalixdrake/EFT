@@ -31,8 +31,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Lee el archivo .env si existe
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# Intentar leer .env en el host, pero no es obligatorio
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Intentar leer .env en la raíz del repo, pero no es obligatorio
+environ.Env.read_env(os.path.join(BASE_DIR.parent, '.env'))
 
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-clave-temporal-para-eft-backend-2026')
 DEBUG = env('DEBUG', default=False)
@@ -180,13 +180,39 @@ SIMPLE_JWT = {
 # CORS (permitir todo en desarrollo)
 CORS_ALLOW_ALL_ORIGINS = True
 
-BOLD_INTEGRITY_SECRET = env('BOLD_INTEGRITY_SECRET', default='')
-BOLD_PUBLIC_KEY = env('BOLD_PUBLIC_KEY', default='')
+def _env_fallback(*keys, default=''):
+    for key in keys:
+        value = env(key, default='')
+        if value:
+            return value
+    return default
+
+
+BOLD_INTEGRITY_SECRET = _env_fallback(
+    'BOLD_INTEGRITY_SECRET',
+    'LLAVE_SECRETA_BOLD_PRUEBA',
+    'LLAVE_SECRETA_BOLD_PROD',
+)
+BOLD_PUBLIC_KEY = _env_fallback(
+    'BOLD_PUBLIC_KEY',
+    'LLAVE_IDENTIDAD_BOLD_PRUEBA',
+    'LLAVE_IDENTIDAD_BOLD_PROD',
+)
 BOLD_REDIRECT_URL = env('BOLD_REDIRECT_URL', default='')
 BOLD_CHECKOUT_URL = env('BOLD_CHECKOUT_URL', default='')
 
-SKYDROPX_API_KEY = env('SKYDROPX_API_KEY', default='')
-SKYDROPX_API_BASE_URL = env('SKYDROPX_API_BASE_URL', default='https://api.skydropx.com/v1')
+SKYDROPX_CLIENT_ID = _env_fallback('SKYDROPX_CLIENT_ID', 'API_KEY_SKYDROPX_SANDBOX', 'API_KEY_SKYDROPX')
+SKYDROPX_CLIENT_SECRET = _env_fallback('SKYDROPX_CLIENT_SECRET', 'API_SECRET_KEY_SKYDROPX_SANDBOX', 'API_SECRET_KEY_SKYDROPX')
+# Legacy — kept for backward compat; the client now uses CLIENT_ID/SECRET with OAuth2
+SKYDROPX_API_KEY_SANDBOX = env('API_KEY_SKYDROPX_SANDBOX', default='')
+SKYDROPX_API_KEY_PROD = env('API_KEY_SKYDROPX', default='')
+SKYDROPX_API_KEY = SKYDROPX_CLIENT_ID  # alias
+SKYDROPX_API_BASE_URL = env('SKYDROPX_API_BASE_URL', default='')
+if not SKYDROPX_API_BASE_URL:
+    if SKYDROPX_API_KEY_SANDBOX and SKYDROPX_CLIENT_ID == SKYDROPX_API_KEY_SANDBOX:
+        SKYDROPX_API_BASE_URL = 'https://sb-pro.skydropx.com/api/v1'
+    else:
+        SKYDROPX_API_BASE_URL = 'https://pro.skydropx.com/api/v1'
 SKYDROPX_ORIGIN_POSTAL_CODE = env('SKYDROPX_ORIGIN_POSTAL_CODE', default='')
 SHIPPING_CARRIERS = env.list('SHIPPING_CARRIERS', default=[])
 SHIPPING_ORIGIN_NAME = env('SHIPPING_ORIGIN_NAME', default='')
@@ -207,3 +233,5 @@ CELERY_TIMEZONE = TIME_ZONE
 if 'test' in sys.argv:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+    if not BOLD_INTEGRITY_SECRET:
+        BOLD_INTEGRITY_SECRET = 'test-secret'

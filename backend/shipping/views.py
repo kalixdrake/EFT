@@ -33,11 +33,33 @@ class ShippingQuoteAPIView(APIView):
             'width': str(metrics['dimensions']['width']),
             'length': str(metrics['dimensions']['length']),
         }
+
+        address_from = {
+            'country_code': getattr(settings, 'SHIPPING_ORIGIN_COUNTRY', 'CO'),
+            'postal_code': settings.SKYDROPX_ORIGIN_POSTAL_CODE,
+            'area_level1': settings.SHIPPING_ORIGIN_STATE,
+            'area_level2': settings.SHIPPING_ORIGIN_CITY,
+            'area_level3': settings.SHIPPING_ORIGIN_CITY,
+            'street1': settings.SHIPPING_ORIGIN_ADDRESS,
+            'name': settings.SHIPPING_ORIGIN_NAME,
+            'phone': settings.SHIPPING_ORIGIN_PHONE,
+            'email': settings.SHIPPING_ORIGIN_EMAIL,
+        }
+
+        dest_city = serializer.validated_data['destination_city']
+        address_to = {
+            'country_code': getattr(settings, 'SHIPPING_DESTINATION_COUNTRY', 'CO'),
+            'postal_code': serializer.validated_data['destination_postal_code'],
+            'area_level1': serializer.validated_data.get('destination_area_level1') or dest_city,
+            'area_level2': dest_city,
+            'area_level3': serializer.validated_data.get('destination_area_level3') or dest_city,
+        }
+
         client = SkydropxClient()
         try:
             quotes = client.get_quotes(
-                zip_from=settings.SKYDROPX_ORIGIN_POSTAL_CODE,
-                zip_to=serializer.validated_data['destination_postal_code'],
+                address_from=address_from,
+                address_to=address_to,
                 parcel=parcel,
                 carriers=settings.SHIPPING_CARRIERS or None,
             )
@@ -48,6 +70,9 @@ class ShippingQuoteAPIView(APIView):
             return Response({'detail': 'No hay cotizaciones disponibles.'}, status=status.HTTP_404_NOT_FOUND)
 
         response_quotes = []
+        items_metadata = [
+            {'product_id': item['product'].id, 'quantity': item['quantity']} for item in items
+        ]
         for quote in quotes:
             stored = ShippingQuote.objects.create(
                 user=request.user,
@@ -56,13 +81,15 @@ class ShippingQuoteAPIView(APIView):
                 service_code=quote.service_code,
                 estimated_days=quote.estimated_days,
                 cost_cop=quote.cost,
-                skydropx_quote_id=quote.raw.get('id', ''),
-                destination_city=serializer.validated_data['destination_city'],
+                skydropx_quote_id=quote.rate_id,
+                skydropx_quotation_id=quote.quotation_id,
+                skydropx_rate_id=quote.rate_id,
+                destination_city=dest_city,
                 destination_postal_code=serializer.validated_data['destination_postal_code'],
                 weight_kg=metrics['weight_kg'],
-                dimensions=metrics['dimensions'],
+                dimensions={k: float(v) for k, v in metrics['dimensions'].items()},
                 shipping_credit_available=metrics['shipping_credit'],
-                metadata={'raw_quote': quote.raw, 'items': serializer.validated_data['cart_items']},
+                metadata={'raw_quote': quote.raw, 'items': items_metadata},
             )
             cost_after_credit = max(Decimal('0.00'), quote.cost - metrics['shipping_credit'])
             response_quotes.append(

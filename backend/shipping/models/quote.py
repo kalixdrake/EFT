@@ -13,7 +13,9 @@ class ShippingQuote(models.Model):
     service_code = models.CharField(max_length=120, blank=True)
     estimated_days = models.PositiveIntegerField(default=0)
     cost_cop = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
-    skydropx_quote_id = models.CharField(max_length=120, blank=True)
+    skydropx_quote_id = models.CharField(max_length=120, blank=True)  # legacy
+    skydropx_quotation_id = models.CharField(max_length=120, blank=True)  # UUID from POST /quotations
+    skydropx_rate_id = models.CharField(max_length=120, blank=True)       # rate UUID for shipment creation
     destination_city = models.CharField(max_length=120)
     destination_postal_code = models.CharField(max_length=20, blank=True)
     weight_kg = models.DecimalField(max_digits=8, decimal_places=3, default=Decimal('0.000'))

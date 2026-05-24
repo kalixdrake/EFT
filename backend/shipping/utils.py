@@ -16,6 +16,8 @@ def calculate_shipping_metrics(items):
     for item in items:
         product = item['product']
         quantity = item['quantity']
+        if product.shipping_credit_cop < 0:
+            raise serializers.ValidationError(f'Crédito de envío inválido para {product.name}.')
         if product.weight_kg <= 0:
             raise serializers.ValidationError(f'Peso inválido para {product.name}.')
         if product.box_length_cm <= 0 or product.box_width_cm <= 0 or product.box_height_cm <= 0:

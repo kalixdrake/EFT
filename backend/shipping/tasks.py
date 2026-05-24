@@ -13,16 +13,18 @@ from shipping.utils import calculate_shipping_metrics
 
 def _origin_address():
     required = {
+        'country_code': settings.SHIPPING_ORIGIN_COUNTRY,
+        'postal_code': settings.SKYDROPX_ORIGIN_POSTAL_CODE,
+        'area_level1': settings.SHIPPING_ORIGIN_STATE,
+        'area_level2': settings.SHIPPING_ORIGIN_CITY,
+        'area_level3': settings.SHIPPING_ORIGIN_CITY,
+        'street1': settings.SHIPPING_ORIGIN_ADDRESS,
         'name': settings.SHIPPING_ORIGIN_NAME,
-        'address1': settings.SHIPPING_ORIGIN_ADDRESS,
-        'city': settings.SHIPPING_ORIGIN_CITY,
-        'province': settings.SHIPPING_ORIGIN_STATE,
-        'zip': settings.SKYDROPX_ORIGIN_POSTAL_CODE,
-        'country': settings.SHIPPING_ORIGIN_COUNTRY,
         'phone': settings.SHIPPING_ORIGIN_PHONE,
         'email': settings.SHIPPING_ORIGIN_EMAIL,
+        'reference': settings.SHIPPING_ORIGIN_ADDRESS,
     }
-    if not all(required.values()):
+    if not all([required['postal_code'], required['area_level1'], required['area_level2'], required['name']]):
         raise serializers.ValidationError('Faltan datos de origen para generar envíos.')
     return required
 
@@ -30,17 +32,19 @@ def _origin_address():
 def _destination_address(order):
     user = order.user
     address = order.address
+    phone = getattr(user, 'phone', '') or ''
     return {
-        'name': f'{user.first_name} {user.last_name}'.strip() or user.username,
-        'company': '-',
-        'address1': address.line,
-        'address2': address.label or '',
-        'city': address.municipality.name,
-        'province': address.municipality.department.name,
-        'zip': address.postal_code,
-        'country': settings.SHIPPING_DESTINATION_COUNTRY,
-        'phone': user.phone or '',
+        'country_code': settings.SHIPPING_DESTINATION_COUNTRY,
+        'postal_code': address.postal_code or '',
+        'area_level1': address.municipality.department.name,
+        'area_level2': address.municipality.name,
+        'area_level3': address.municipality.name,
+        'street1': address.line,
+        'name': f'{user.first_name} {user.last_name}'.strip() or user.email.split('@')[0],
+        'company': '',
+        'phone': phone or settings.SHIPPING_ORIGIN_PHONE,  # fallback to store phone if needed
         'email': user.email,
+        'reference': address.label or address.line or 'Sin referencia',
     }
 
 
@@ -67,20 +71,12 @@ def crear_guia_envio(self, order_id):
     )
 
     client = SkydropxClient()
-    parcel = {
-        'weight': str(metrics['weight_kg']),
-        'height': str(metrics['dimensions']['height']),
-        'width': str(metrics['dimensions']['width']),
-        'length': str(metrics['dimensions']['length']),
-    }
     try:
         shipment_data = client.create_shipment(
+            quotation_id=quote.skydropx_quotation_id,
+            rate_id=quote.skydropx_rate_id,
             address_from=_origin_address(),
             address_to=_destination_address(order),
-            parcel=parcel,
-            carrier=quote.carrier,
-            service_code=quote.service_code,
-            order_reference=order.order_number,
         )
     except SkydropxError as exc:
         raise self.retry(exc=exc, countdown=2 ** self.request.retries)
@@ -109,5 +105,10 @@ def crear_guia_envio(self, order_id):
             shipment.skydropx_shipment_id = shipment.skydropx_shipment_id or shipment_data.shipment_id
             shipment.save()
 
-        order.status = Order.Status.SHIPPED
-        order.save(update_fields=['status'])
+        if order.status not in {
+            Order.Status.PENDING_COD,
+            Order.Status.CANCELLED,
+            Order.Status.DELIVERED,
+        }:
+            order.status = Order.Status.SHIPPED
+            order.save(update_fields=['status'])

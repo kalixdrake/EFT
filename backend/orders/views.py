@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, F
-from rest_framework import generics, status
+from rest_framework import generics, serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -147,6 +147,10 @@ class OrderCreateAPIView(APIView):
             for item in items:
                 if item.quantity > item.product.stock:
                     return Response({'detail': f'Insufficient stock for {item.product.name}.'}, status=status.HTTP_400_BAD_REQUEST)
+                if item.product.shipping_credit_cop < 0:
+                    raise serializers.ValidationError(
+                        f'Crédito de envío inválido para {item.product.name}.'
+                    )
 
             order = Order.objects.create(user=request.user, address=address)
             total = Decimal('0.00')
@@ -165,6 +169,8 @@ class OrderCreateAPIView(APIView):
 
             shipping_cost_before_credit = quote.cost_cop
             shipping_credit_applied = min(shipping_credit_available, shipping_cost_before_credit)
+            if shipping_credit_applied < 0:
+                raise serializers.ValidationError('Crédito de envío inválido.')
             shipping_cost = max(Decimal('0.00'), shipping_cost_before_credit - shipping_credit_applied)
 
             order.shipping_quote = quote
