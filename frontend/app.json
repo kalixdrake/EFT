@@ -3,6 +3,7 @@
     "name": "EFT Shop",
     "slug": "eft-shop",
     "version": "1.0.0",
+    "scheme": "eftshop",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

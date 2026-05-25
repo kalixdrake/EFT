@@ -82,20 +82,22 @@ class SkydropxClient:
             'Content-Type': 'application/json',
         }
 
-    def get_quotes(self, address_from: dict, address_to: dict, parcel: dict, carriers: Optional[list] = None) -> list:
+    def get_quotes(self, address_from: dict, address_to: dict, parcel: dict, carriers: Optional[list] = None, declared_amount: Optional[float] = None) -> list:
         """
         Cotiza envíos.
 
         address_from / address_to deben incluir:
-          country_code, postal_code, area_level1, area_level2, area_level3
+          country_code, postal_code, area_level1, area_level2
 
         parcel debe incluir: weight, length, width, height (numéricos)
+        declared_amount: valor declarado (requerido para CO; va dentro de cada parcel)
         """
         parcels = [{
             'weight': float(parcel['weight']),
             'length': int(float(parcel['length'])),
             'width': int(float(parcel['width'])),
             'height': int(float(parcel['height'])),
+            'declared_amount': declared_amount or 10000,
         }]
 
         quotation_payload: dict = {
@@ -104,14 +106,12 @@ class SkydropxClient:
                 'postal_code': address_from['postal_code'],
                 'area_level1': address_from['area_level1'],
                 'area_level2': address_from['area_level2'],
-                'area_level3': address_from.get('area_level3', address_from['area_level2']),
             },
             'address_to': {
                 'country_code': address_to['country_code'],
                 'postal_code': address_to['postal_code'],
                 'area_level1': address_to['area_level1'],
                 'area_level2': address_to['area_level2'],
-                'area_level3': address_to.get('area_level3', address_to['area_level2']),
             },
             'parcels': parcels,
         }

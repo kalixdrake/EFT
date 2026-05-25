@@ -201,18 +201,35 @@ BOLD_PUBLIC_KEY = _env_fallback(
 BOLD_REDIRECT_URL = env('BOLD_REDIRECT_URL', default='')
 BOLD_CHECKOUT_URL = env('BOLD_CHECKOUT_URL', default='')
 
-SKYDROPX_CLIENT_ID = _env_fallback('SKYDROPX_CLIENT_ID', 'API_KEY_SKYDROPX_SANDBOX', 'API_KEY_SKYDROPX')
-SKYDROPX_CLIENT_SECRET = _env_fallback('SKYDROPX_CLIENT_SECRET', 'API_SECRET_KEY_SKYDROPX_SANDBOX', 'API_SECRET_KEY_SKYDROPX')
-# Legacy — kept for backward compat; the client now uses CLIENT_ID/SECRET with OAuth2
 SKYDROPX_API_KEY_SANDBOX = env('API_KEY_SKYDROPX_SANDBOX', default='')
 SKYDROPX_API_KEY_PROD = env('API_KEY_SKYDROPX', default='')
-SKYDROPX_API_KEY = SKYDROPX_CLIENT_ID  # alias
 SKYDROPX_API_BASE_URL = env('SKYDROPX_API_BASE_URL', default='')
+
+# Select credentials based on explicit URL override, then fall back to whichever key is set.
+# If SKYDROPX_API_BASE_URL points to production (or is not sandbox), use production keys.
+_use_sandbox = (
+    'sb-pro' in SKYDROPX_API_BASE_URL
+    if SKYDROPX_API_BASE_URL
+    else bool(SKYDROPX_API_KEY_SANDBOX and not SKYDROPX_API_KEY_PROD)
+)
+
 if not SKYDROPX_API_BASE_URL:
-    if SKYDROPX_API_KEY_SANDBOX and SKYDROPX_CLIENT_ID == SKYDROPX_API_KEY_SANDBOX:
-        SKYDROPX_API_BASE_URL = 'https://sb-pro.skydropx.com/api/v1'
-    else:
-        SKYDROPX_API_BASE_URL = 'https://pro.skydropx.com/api/v1'
+    SKYDROPX_API_BASE_URL = (
+        'https://sb-pro.skydropx.com/api/v1' if _use_sandbox
+        else 'https://pro.skydropx.com/api/v1'
+    )
+
+SKYDROPX_CLIENT_ID = _env_fallback(
+    'SKYDROPX_CLIENT_ID',
+    'API_KEY_SKYDROPX_SANDBOX' if _use_sandbox else 'API_KEY_SKYDROPX',
+    'API_KEY_SKYDROPX' if _use_sandbox else 'API_KEY_SKYDROPX_SANDBOX',
+)
+SKYDROPX_CLIENT_SECRET = _env_fallback(
+    'SKYDROPX_CLIENT_SECRET',
+    'API_SECRET_KEY_SKYDROPX_SANDBOX' if _use_sandbox else 'API_SECRET_KEY_SKYDROPX',
+    'API_SECRET_KEY_SKYDROPX' if _use_sandbox else 'API_SECRET_KEY_SKYDROPX_SANDBOX',
+)
+SKYDROPX_API_KEY = SKYDROPX_CLIENT_ID  # alias
 SKYDROPX_ORIGIN_POSTAL_CODE = env('SKYDROPX_ORIGIN_POSTAL_CODE', default='')
 SHIPPING_CARRIERS = env.list('SHIPPING_CARRIERS', default=[])
 SHIPPING_ORIGIN_NAME = env('SHIPPING_ORIGIN_NAME', default='')

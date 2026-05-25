@@ -73,3 +73,34 @@ class BoldWebhookTests(TransactionTestCase):
         response = self.client.post('/api/payments/webhook/', payload, format='json', HTTP_X_BOLD_SIGNATURE=signature)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Payment.objects.count(), 1)
+
+    def test_webhook_resolves_order_by_bold_reference(self):
+        payment = Payment.objects.create(
+            order=self.order,
+            amount='100.00',
+            currency='COP',
+            status=Payment.Status.PENDING,
+            bold_reference=f'{self.order.order_number}-retry123',
+        )
+        payload = {
+            'event': 'SALE_APPROVED',
+            'transaction_id': 'txn_retry_001',
+            'order_reference': payment.bold_reference,
+            'amount': 10000,
+            'currency': 'COP',
+            'timestamp': '2026-05-24T14:30:00Z',
+        }
+
+        response = self.client.post(
+            '/api/payments/webhook/',
+            payload,
+            format='json',
+            HTTP_X_BOLD_SIGNATURE=self._signature(payload),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.APPROVED)
+        self.assertEqual(payment.transaction_id, 'txn_retry_001')
+        self.assertEqual(self.order.status, Order.Status.CONFIRMED)

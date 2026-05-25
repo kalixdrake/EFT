@@ -1,62 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { shippingApi } from '../api/services';
+import { useDispatch, useSelector } from 'react-redux';
+import { clearQuotes, fetchShippingQuotes, setSelectedQuote } from '../store/shippingSlice';
 import ErrorView from './ErrorView';
 import { formatPrice } from '../utils/format';
 import { colors, spacing } from '../utils/theme';
 
-export default function ShippingSelector({
-  cartItems,
-  destination,
-  onSelectShipping,
-  selectedQuoteId,
-}) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [quotes, setQuotes] = useState([]);
-  const [meta, setMeta] = useState(null);
+export default function ShippingSelector({ cartItems, destination }) {
+  const dispatch = useDispatch();
+  const { loading, error, quotes, meta, selectedQuoteId } = useSelector((state) => state.shipping);
 
   const payload = useMemo(() => {
     if (!cartItems?.length || !destination?.city || !destination?.postalCode) return null;
-    return {
-      cart_items: cartItems.map((item) => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-      })),
-      destination_city: destination.city,
-      destination_postal_code: destination.postalCode,
-    };
+    return { cartItems, destination };
   }, [cartItems, destination]);
 
-  const loadQuotes = useCallback(async () => {
-    if (!payload) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await shippingApi.quote(payload);
-      setQuotes(data.quotes || []);
-      setMeta({
-        weight: data.weight_kg,
-        dimensions: data.dimensions,
-        credit: data.shipping_credit_available,
-      });
-      if (data.quotes?.length) {
-        const defaultQuote =
-          data.quotes.find((quote) => quote.quote_id === selectedQuoteId) || data.quotes[0];
-        onSelectShipping?.(defaultQuote);
-      }
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error al cotizar envío');
-      setQuotes([]);
-      setMeta(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [payload, selectedQuoteId, onSelectShipping]);
-
   useEffect(() => {
-    loadQuotes();
-  }, [loadQuotes]);
+    if (!payload) {
+      dispatch(clearQuotes());
+      return;
+    }
+    dispatch(fetchShippingQuotes(payload));
+  }, [dispatch, payload]);
 
   if (!payload) {
     return (
@@ -76,7 +41,7 @@ export default function ShippingSelector({
   }
 
   if (error) {
-    return <ErrorView message={error} onRetry={loadQuotes} />;
+    return <ErrorView message={error} onRetry={() => dispatch(fetchShippingQuotes(payload))} />;
   }
 
   return (
@@ -94,7 +59,7 @@ export default function ShippingSelector({
           <Pressable
             key={quote.quote_id}
             style={[styles.quoteCard, isSelected && styles.quoteSelected]}
-            onPress={() => onSelectShipping?.(quote)}
+            onPress={() => dispatch(setSelectedQuote(quote.quote_id))}
           >
             <View style={styles.quoteHeader}>
               <Text style={styles.quoteCarrier}>{quote.carrier}</Text>

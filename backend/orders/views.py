@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import transaction
@@ -24,6 +25,23 @@ from products.models import Product
 from shipping.models import ShippingQuote
 from shipping.services.skydropx import SkydropxClient, SkydropxError
 from shipping.tasks import crear_guia_envio
+
+
+def _build_bold_data(order, payment):
+    order_reference = payment.bold_reference or f'{order.order_number}-{uuid4().hex[:8]}'
+    amount_cents = int(order.total * 100)
+    if payment.bold_reference != order_reference:
+        payment.bold_reference = order_reference
+        payment.save(update_fields=['bold_reference', 'updated_at'])
+    return {
+        'order_reference': order_reference,
+        'amount_cents': amount_cents,
+        'currency': 'COP',
+        'integrity_hash': calculate_integrity_hash(order_reference, amount_cents, 'COP'),
+        'redirect_url': settings.BOLD_REDIRECT_URL,
+        'checkout_url': settings.BOLD_CHECKOUT_URL,
+        'public_key': settings.BOLD_PUBLIC_KEY,
+    }
 
 
 class CartAPIView(APIView):
@@ -223,16 +241,8 @@ class OrderCreateAPIView(APIView):
         )
         response_data = OrderDetailSerializer(order).data
         if order.payment_method == Order.PaymentMethod.BOLD:
-            amount_cents = int(order.total * 100)
-            response_data['bold_data'] = {
-                'order_reference': order.order_number,
-                'amount_cents': amount_cents,
-                'currency': 'COP',
-                'integrity_hash': calculate_integrity_hash(order.order_number, amount_cents, 'COP'),
-                'redirect_url': settings.BOLD_REDIRECT_URL,
-                'checkout_url': settings.BOLD_CHECKOUT_URL,
-                'public_key': settings.BOLD_PUBLIC_KEY,
-            }
+            payment = Payment.objects.get(order=order)
+            response_data['bold_data'] = _build_bold_data(order, payment)
         else:
             response_data['bold_data'] = None
 
@@ -240,6 +250,47 @@ class OrderCreateAPIView(APIView):
             crear_guia_envio.delay(order.id)
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class OrderRetryPaymentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            order = (
+                Order.objects.select_related('user', 'address__municipality__department', 'payment')
+                .prefetch_related('items__product')
+                .annotate(items_total=Count('items'))
+                .get(pk=pk, user=request.user)
+            )
+        except Order.DoesNotExist:
+            return Response({'detail': 'Orden no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.payment_method != Order.PaymentMethod.BOLD:
+            return Response(
+                {'detail': 'Solo los pedidos con pago Bold permiten reintento.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if order.status != Order.Status.PENDING:
+            return Response(
+                {'detail': 'Solo puedes reintentar pagos de pedidos pendientes.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payment = getattr(order, 'payment', None)
+        if payment is None:
+            return Response({'detail': 'Pago no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        payment.transaction_id = None
+        payment.status = Payment.Status.PENDING
+        payment.metadata = {}
+        payment.bold_reference = f'{order.order_number}-{uuid4().hex[:8]}'
+        payment.save(update_fields=['transaction_id', 'status', 'metadata', 'bold_reference', 'updated_at'])
+
+        response_data = OrderDetailSerializer(order).data
+        response_data['bold_data'] = _build_bold_data(order, payment)
+        return Response(response_data)
 
 
 class OrderTrackingAPIView(APIView):

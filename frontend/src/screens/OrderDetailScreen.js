@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import BoldPaymentButton from '../components/BoldPaymentButton';
 import ErrorView from '../components/ErrorView';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { ordersApi } from '../api/services';
-import { fetchOrderDetail } from '../store/orderSlice';
+import { fetchOrderDetail, retryOrderPayment } from '../store/orderSlice';
+import { appendOrderIdToRedirectUrl } from '../utils/bold';
 import { formatDate, formatPrice, getOrderStatusLabel } from '../utils/format';
 import { colors, spacing } from '../utils/theme';
 
-export default function OrderDetailScreen({ route }) {
+export default function OrderDetailScreen({ route, navigation }) {
   const { orderId } = route.params;
   const dispatch = useDispatch();
   const { currentOrder, loading, error } = useSelector((state) => state.orders);
   const [tracking, setTracking] = useState(null);
   const [trackingError, setTrackingError] = useState(null);
+  const [boldRetryData, setBoldRetryData] = useState(null);
+  const [retryLoading, setRetryLoading] = useState(false);
 
   const loadOrder = useCallback(() => {
     dispatch(fetchOrderDetail(orderId));
@@ -46,13 +50,37 @@ export default function OrderDetailScreen({ route }) {
   if (loading && !currentOrder) {
     return <LoadingSpinner />;
   }
-
   if (error) {
     return <ErrorView message={error} onRetry={loadOrder} />;
   }
 
   const order = currentOrder;
   if (!order) return null;
+
+  const canRetryPayment = order.status === 'pending' && order.payment_method === 'bold';
+
+  const handleRetryPayment = async () => {
+    setRetryLoading(true);
+    try {
+      const result = await dispatch(retryOrderPayment(orderId)).unwrap();
+      if (result.bold_data) {
+        setBoldRetryData({ ...result.bold_data, orderId });
+      }
+    } catch (_) {
+      // Error reflected in Redux state
+    } finally {
+      setRetryLoading(false);
+    }
+  };
+
+  const handleRetryComplete = ({ status, orderId: completedId }) => {
+    setBoldRetryData(null);
+    navigation.replace('PaymentResult', { orderId: completedId ?? orderId, status });
+  };
+
+  const handleRetryError = () => {
+    setBoldRetryData(null);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -99,6 +127,30 @@ export default function OrderDetailScreen({ route }) {
         <Text style={styles.text}>Método: {order.payment_method}</Text>
         {order.payment_status ? (
           <Text style={styles.text}>Estado: {order.payment_status}</Text>
+        ) : null}
+        {canRetryPayment && !boldRetryData ? (
+          <Pressable
+            style={[styles.retryBtn, retryLoading && styles.retryBtnDisabled]}
+            onPress={handleRetryPayment}
+            disabled={retryLoading}
+          >
+            <Text style={styles.retryBtnText}>
+              {retryLoading ? 'Cargando…' : 'Reintentar pago'}
+            </Text>
+          </Pressable>
+        ) : null}
+        {boldRetryData ? (
+          <BoldPaymentButton
+            publicKey={boldRetryData.public_key}
+            checkoutUrl={boldRetryData.checkout_url}
+            orderReference={boldRetryData.order_reference}
+            amountCents={boldRetryData.amount_cents}
+            currency={boldRetryData.currency}
+            integrityHash={boldRetryData.integrity_hash}
+            redirectUrl={appendOrderIdToRedirectUrl(boldRetryData.redirect_url, boldRetryData.orderId)}
+            onPaymentComplete={handleRetryComplete}
+            onError={handleRetryError}
+          />
         ) : null}
       </View>
 
@@ -232,5 +284,20 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: colors.primary,
+  },
+  retryBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  retryBtnDisabled: {
+    opacity: 0.6,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

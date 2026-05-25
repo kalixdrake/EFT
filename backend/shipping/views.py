@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from shipping.models import ShippingQuote
+from shipping.models import ShippingQuote, ShippingOrigin
 from shipping.serializers import ShippingQuoteRequestSerializer
 from shipping.services.skydropx import SkydropxClient, SkydropxError
 from shipping.utils import calculate_shipping_metrics
@@ -21,7 +21,9 @@ class ShippingQuoteAPIView(APIView):
         items = serializer.validated_data['cart_items']
 
         metrics = calculate_shipping_metrics(items)
-        if not settings.SKYDROPX_ORIGIN_POSTAL_CODE:
+
+        origin = ShippingOrigin.get_active()
+        if not origin:
             return Response(
                 {'detail': 'Origen de envío no configurado.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -35,20 +37,20 @@ class ShippingQuoteAPIView(APIView):
         }
 
         address_from = {
-            'country_code': getattr(settings, 'SHIPPING_ORIGIN_COUNTRY', 'CO'),
-            'postal_code': settings.SKYDROPX_ORIGIN_POSTAL_CODE,
-            'area_level1': settings.SHIPPING_ORIGIN_STATE,
-            'area_level2': settings.SHIPPING_ORIGIN_CITY,
-            'area_level3': settings.SHIPPING_ORIGIN_CITY,
-            'street1': settings.SHIPPING_ORIGIN_ADDRESS,
-            'name': settings.SHIPPING_ORIGIN_NAME,
-            'phone': settings.SHIPPING_ORIGIN_PHONE,
-            'email': settings.SHIPPING_ORIGIN_EMAIL,
+            'country_code': origin.country_code,
+            'postal_code': origin.postal_code,
+            'area_level1': origin.state,
+            'area_level2': origin.city,
+            'area_level3': origin.city,
+            'street1': origin.address,
+            'name': origin.name,
+            'phone': origin.phone,
+            'email': origin.email,
         }
 
         dest_city = serializer.validated_data['destination_city']
         address_to = {
-            'country_code': getattr(settings, 'SHIPPING_DESTINATION_COUNTRY', 'CO'),
+            'country_code': origin.country_code,
             'postal_code': serializer.validated_data['destination_postal_code'],
             'area_level1': serializer.validated_data.get('destination_area_level1') or dest_city,
             'area_level2': dest_city,
@@ -56,12 +58,16 @@ class ShippingQuoteAPIView(APIView):
         }
 
         client = SkydropxClient()
+        declared_amount = float(sum(
+            item['product'].price * item['quantity'] for item in items
+        ))
         try:
             quotes = client.get_quotes(
                 address_from=address_from,
                 address_to=address_to,
                 parcel=parcel,
                 carriers=settings.SHIPPING_CARRIERS or None,
+                declared_amount=declared_amount,
             )
         except SkydropxError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)

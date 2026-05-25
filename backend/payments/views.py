@@ -33,40 +33,50 @@ class BoldWebhookAPIView(APIView):
         if not all([event, transaction_id, order_reference, amount]):
             return Response({'detail': 'Payload incompleto.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            order = Order.objects.get(order_number=order_reference)
-        except Order.DoesNotExist:
-            return Response({'detail': 'Orden no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        payment = Payment.objects.select_related('order').filter(bold_reference=order_reference).first()
+        if payment:
+            order = payment.order
+        else:
+            try:
+                order = Order.objects.get(order_number=order_reference)
+            except Order.DoesNotExist:
+                return Response({'detail': 'Orden no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
         approved_events = {'SALE_APPROVED'}
         rejected_events = {'SALE_REJECTED'}
 
         with transaction.atomic():
-            payment = Payment.objects.select_for_update().filter(transaction_id=transaction_id).first()
-            if payment and payment.order_id != order.id:
+            payment_by_tx = Payment.objects.select_for_update().filter(transaction_id=transaction_id).first()
+            if payment_by_tx and payment_by_tx.order_id != order.id:
                 PaymentLog.objects.create(
-                    payment=payment,
+                    payment=payment_by_tx,
                     event=event,
                     payload={'note': 'Transaction id reused', **payload},
                 )
                 return Response({'status': 'received'})
 
+            payment = payment_by_tx or Payment.objects.select_for_update().filter(order=order).first()
             if not payment:
-                payment = Payment.objects.select_for_update().filter(order=order).first()
-                if not payment:
-                    payment = Payment.objects.create(
-                        order=order,
-                        transaction_id=transaction_id,
-                        amount=Decimal(str(amount)),
-                        currency=currency,
-                        status=Payment.Status.PENDING,
-                        metadata=payload,
-                    )
-                else:
-                    payment.transaction_id = transaction_id
-                    payment.amount = Decimal(str(amount))
-                    payment.currency = currency
-                    payment.metadata = payload
+                payment = Payment.objects.create(
+                    order=order,
+                    transaction_id=transaction_id,
+                    bold_reference=order_reference,
+                    amount=Decimal(str(amount)),
+                    currency=currency,
+                    status=Payment.Status.PENDING,
+                    metadata=payload,
+                )
+            else:
+                if not payment.bold_reference:
+                    payment.bold_reference = order_reference
+                payment.transaction_id = transaction_id
+                payment.amount = Decimal(str(amount))
+                payment.currency = currency
+                payment.metadata = payload
+                if payment.order_id != order.id:
+                    payment.order = order
+                if payment.order_id == order.id and payment_by_tx is None and payment.bold_reference != order_reference:
+                    payment.bold_reference = order_reference
 
             if event in approved_events:
                 payment.status = Payment.Status.APPROVED

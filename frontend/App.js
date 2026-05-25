@@ -30,10 +30,24 @@ function AppContent() {
   );
 }
 
+const linking = {
+  prefixes: ['eftshop://', 'https://eftshop.com', 'http://localhost:8081'],
+  config: {
+    screens: {
+      // Bold redirects back to /payment-result?orderId=X&bold-tx-status=...
+      // React Navigation parses query params as route.params automatically.
+      PaymentResult: {
+        path: 'payment-result',
+        parse: { orderId: (id) => id },
+      },
+    },
+  },
+};
+
 export default function App() {
   return (
     <Provider store={store}>
-      <NavigationContainer>
+      <NavigationContainer linking={linking}>
         <AppContent />
       </NavigationContainer>
     </Provider>

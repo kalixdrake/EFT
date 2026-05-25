@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +18,7 @@ import PaymentMethodSelector from '../components/PaymentMethodSelector';
 import ShippingSelector from '../components/ShippingSelector';
 import { fetchAddresses, setSelectedAddressId } from '../store/addressSlice';
 import { createOrder } from '../store/orderSlice';
+import { appendOrderIdToRedirectUrl } from '../utils/bold';
 import { formatPrice } from '../utils/format';
 import { colors, spacing } from '../utils/theme';
 
@@ -32,8 +32,9 @@ export default function CheckoutScreen({ navigation }) {
   const { total, items } = useSelector((state) => state.cart);
   const { loading: orderLoading } = useSelector((state) => state.orders);
   const { addresses, selectedAddressId, loading, error } = useSelector((state) => state.address);
-  const [selectedQuote, setSelectedQuote] = useState(null);
+  const { quotes, selectedQuoteId } = useSelector((state) => state.shipping);
   const [paymentMethod, setPaymentMethod] = useState('bold');
+  const [boldData, setBoldData] = useState(null);
 
   const loadAddresses = useCallback(() => {
     dispatch(fetchAddresses());
@@ -57,6 +58,11 @@ export default function CheckoutScreen({ navigation }) {
     [addresses, selectedAddressId],
   );
 
+  const selectedQuote = useMemo(
+    () => quotes.find((q) => q.quote_id === selectedQuoteId) ?? null,
+    [quotes, selectedQuoteId],
+  );
+
   const destination = useMemo(() => {
     if (!selectedAddress) return null;
     return {
@@ -77,7 +83,7 @@ export default function CheckoutScreen({ navigation }) {
       Alert.alert('Datos incompletos', 'Selecciona o crea una dirección de envío.');
       return;
     }
-    if (!selectedQuote) {
+    if (!selectedQuoteId) {
       Alert.alert('Datos incompletos', 'Selecciona una opción de envío.');
       return;
     }
@@ -86,18 +92,35 @@ export default function CheckoutScreen({ navigation }) {
       const order = await dispatch(
         createOrder({
           address_id: selectedAddressId,
-          shipping_quote_id: selectedQuote.quote_id,
+          shipping_quote_id: selectedQuoteId,
           payment_method: paymentMethod,
         }),
       ).unwrap();
-      if (paymentMethod === 'bold' && order.bold_data?.checkout_url) {
-        await Linking.openURL(order.bold_data.checkout_url);
+
+      if (paymentMethod === 'bold' && order.bold_data) {
+        setBoldData({ ...order.bold_data, orderId: order.id });
+      } else {
+        // COD: order created and guide dispatched immediately
+        navigation.replace('OrderDetail', { orderId: order.id });
       }
-      navigation.replace('OrderDetail', { orderId: order.id });
     } catch (err) {
       Alert.alert('Error', String(err));
     }
   };
+
+  const handlePaymentComplete = useCallback(
+    ({ status, orderReference, orderId }) => {
+      const targetOrderId = orderId ?? boldData?.orderId;
+      setBoldData(null);
+      navigation.replace('PaymentResult', { orderId: targetOrderId, status });
+    },
+    [boldData, navigation],
+  );
+
+  const handlePaymentError = useCallback((err) => {
+    setBoldData(null);
+    Alert.alert('Error en el pago', err?.message || 'Ocurrió un error al procesar el pago.');
+  }, []);
 
   if (loading && addresses.length === 0) {
     return <LoadingSpinner />;
@@ -177,8 +200,6 @@ export default function CheckoutScreen({ navigation }) {
         <ShippingSelector
           cartItems={items}
           destination={destination}
-          selectedQuoteId={selectedQuote?.quote_id}
-          onSelectShipping={setSelectedQuote}
         />
 
         <PaymentMethodSelector
@@ -206,17 +227,35 @@ export default function CheckoutScreen({ navigation }) {
           </View>
         </View>
 
-        {paymentMethod === 'bold' ? (
+        {boldData ? (
           <BoldPaymentButton
-            loading={orderLoading}
-            disabled={!selectedAddressId || !selectedQuote}
-            onPress={handleConfirm}
+            publicKey={boldData.public_key}
+            checkoutUrl={boldData.checkout_url}
+            orderReference={boldData.order_reference}
+            amountCents={boldData.amount_cents}
+            currency={boldData.currency}
+            integrityHash={boldData.integrity_hash}
+            redirectUrl={appendOrderIdToRedirectUrl(boldData.redirect_url, boldData.orderId)}
+            onPaymentComplete={handlePaymentComplete}
+            onError={handlePaymentError}
           />
+        ) : paymentMethod === 'bold' ? (
+          <Pressable
+            style={[styles.button, (orderLoading || !selectedAddressId || !selectedQuoteId) && styles.buttonDisabled]}
+            onPress={handleConfirm}
+            disabled={orderLoading || !selectedAddressId || !selectedQuoteId}
+          >
+            {orderLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Pagar con Bold</Text>
+            )}
+          </Pressable>
         ) : (
           <Pressable
-            style={[styles.button, (orderLoading || !selectedAddressId || !selectedQuote) && styles.buttonDisabled]}
+            style={[styles.button, (orderLoading || !selectedAddressId || !selectedQuoteId) && styles.buttonDisabled]}
             onPress={handleConfirm}
-            disabled={orderLoading || !selectedAddressId || !selectedQuote}
+            disabled={orderLoading || !selectedAddressId || !selectedQuoteId}
           >
             {orderLoading ? (
               <ActivityIndicator color="#fff" />

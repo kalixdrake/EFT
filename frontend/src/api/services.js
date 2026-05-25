@@ -48,6 +48,7 @@ export const ordersApi = {
     apiClient
       .post('/api/orders/create/', { address_id, shipping_quote_id, payment_method, notes })
       .then((r) => r.data),
+  retryPayment: (id) => apiClient.post(`/api/orders/${id}/retry-payment/`).then((r) => r.data),
   tracking: (id) => apiClient.get(`/api/orders/${id}/tracking/`).then((r) => r.data),
 };
 

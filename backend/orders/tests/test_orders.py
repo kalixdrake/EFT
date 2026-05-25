@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from locations.models import Address, Department, Municipality
 from orders.models import Cart, CartItem, Order, OrderItem
+from payments.models import Payment
 from shipping.models import ShippingQuote
 from products.models import Category, Product
 
@@ -78,8 +79,13 @@ class OrderAPITests(TransactionTestCase):
         self.assertEqual(response.data['total'], '100.00')
         self.assertRegex(response.data['order_number'], r'^\d{8}-\d+$')
         self.assertEqual(response.data['address']['line'], 'Street 123')
+        self.assertEqual(response.data['bold_data']['currency'], 'COP')
+        self.assertEqual(response.data['bold_data']['amount_cents'], 10000)
+        self.assertRegex(response.data['bold_data']['order_reference'], r'^\d{8}-\d+-[0-9a-f]{8}$')
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(OrderItem.objects.count(), 1)
+        payment = Payment.objects.get(order_id=response.data['id'])
+        self.assertEqual(payment.bold_reference, response.data['bold_data']['order_reference'])
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock, 2)
 
@@ -108,3 +114,47 @@ class OrderAPITests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['items'][0]['product_name'], 'Cap')
         self.assertEqual(response.data['order_number'], order.order_number)
+
+    def test_retry_payment_returns_fresh_bold_data_for_pending_bold_orders(self):
+        order = Order.objects.create(
+            user=self.user,
+            address=self.address,
+            status=Order.Status.PENDING,
+            payment_method=Order.PaymentMethod.BOLD,
+            total='80.00',
+        )
+        payment = Payment.objects.create(
+            order=order,
+            amount='80.00',
+            currency='COP',
+            status=Payment.Status.REJECTED,
+            transaction_id='txn_old',
+            bold_reference=f'{order.order_number}-oldref00',
+            metadata={'old': True},
+        )
+
+        response = self.client.post(f'/api/orders/{order.pk}/retry-payment/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['id'], order.id)
+        self.assertEqual(response.data['bold_data']['amount_cents'], 8000)
+        self.assertNotEqual(response.data['bold_data']['order_reference'], payment.bold_reference)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertIsNone(payment.transaction_id)
+        self.assertEqual(payment.metadata, {})
+        self.assertEqual(payment.bold_reference, response.data['bold_data']['order_reference'])
+
+    def test_retry_payment_rejects_non_pending_orders(self):
+        order = Order.objects.create(
+            user=self.user,
+            address=self.address,
+            status=Order.Status.CONFIRMED,
+            payment_method=Order.PaymentMethod.BOLD,
+            total='80.00',
+        )
+        Payment.objects.create(order=order, amount='80.00', currency='COP', status=Payment.Status.APPROVED)
+
+        response = self.client.post(f'/api/orders/{order.pk}/retry-payment/')
+
+        self.assertEqual(response.status_code, 400)

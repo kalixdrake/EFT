@@ -30,3 +30,15 @@ export function getOrderStatusLabel(status) {
   };
   return labels[status] || status;
 }
+
+export function getOrderStatusAppearance(status) {
+  const appearance = {
+    pending: { color: '#D97706', backgroundColor: '#FEF3C7' },
+    pending_cod: { color: '#D97706', backgroundColor: '#FEF3C7' },
+    confirmed: { color: '#16A34A', backgroundColor: '#DCFCE7' },
+    shipped: { color: '#2563EB', backgroundColor: '#DBEAFE' },
+    delivered: { color: '#16A34A', backgroundColor: '#DCFCE7' },
+    cancelled: { color: '#DC2626', backgroundColor: '#FEE2E2' },
+  };
+  return appearance[status] || appearance.pending;
+}

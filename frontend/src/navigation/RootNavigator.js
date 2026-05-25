@@ -5,6 +5,7 @@ import AddressFormScreen from '../screens/AddressFormScreen';
 import AuthScreen from '../screens/AuthScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
+import PaymentResultScreen from '../screens/PaymentResultScreen';
 import ProductDetailScreen from '../screens/ProductDetailScreen';
 import { fetchCart } from '../store/cartSlice';
 import { colors } from '../utils/theme';
@@ -55,6 +56,11 @@ function AuthenticatedStack() {
         name="OrderDetail"
         component={OrderDetailScreen}
         options={{ title: 'Detalle del pedido' }}
+      />
+      <Stack.Screen
+        name="PaymentResult"
+        component={PaymentResultScreen}
+        options={{ title: 'Resultado del pago', headerBackVisible: false }}
       />
       <Stack.Screen
         name="AddressForm"
